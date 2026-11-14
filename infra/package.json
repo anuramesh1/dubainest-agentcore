@@ -8,6 +8,7 @@
     "synth": "npx cdk synth",
     "diff": "npx cdk diff",
     "deploy": "npx cdk deploy --all",
+    "deploy:api": "npx cdk deploy DubaiNestAgentCoreApiStack",
     "deploy:frontend": "npx cdk deploy DubaiNestAgentCoreFrontendStack",
     "deploy:obs": "npx cdk deploy DubaiNestAgentCoreObservabilityStack",
     "destroy": "npx cdk destroy --all",

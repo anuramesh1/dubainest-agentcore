@@ -1,7 +1,8 @@
 """DubaiNest AgentCore api: one FastAPI app for every /api/* route.
 
 Local:  uvicorn api.app:app --port 8000 --env-file .env   (from the repo root)
-AWS:    the same app inside the api Lambda, run by Lambda Web Adapter (step 5).
+AWS:    the same app in the api Lambda image (api/Dockerfile), run by Lambda Web
+        Adapter behind a Function URL that only CloudFront can call (step 5).
 
 Routes (spec §2): properties, facets, property detail, enquiries, property-intro,
 and POST /api/chat (agent in-process with AGENT_MODE=local; AgentCore from step 7).
@@ -20,7 +21,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message
 
 app = FastAPI(
     title="DubaiNest AgentCore API",
-    version="0.4.0",
+    version="0.5.0",
     description="Listings, enquiries and chat for the DubaiNest UI.",
 )
 
@@ -30,7 +31,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins(),
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    # x-amz-content-sha256: the UI sends a body hash on POST, which the Lambda
+    # Function URL needs behind CloudFront (frontend/.../signed-body.ts).
+    allow_headers=["Content-Type", "x-amz-content-sha256"],
 )
 
 app.include_router(properties.router)

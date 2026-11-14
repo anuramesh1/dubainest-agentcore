@@ -173,3 +173,17 @@ def test_catalogue_cache_reuses_one_scan(client, monkeypatch):
     for path in ("/api/properties", "/api/properties/facets", "/api/properties/1"):
         assert client.get(path).status_code == 200
     assert len(calls) == 1
+
+
+def test_cors_preflight_allows_body_hash_header(client):
+    """The UI on :4200 sends x-amz-content-sha256 on POST (needed behind CloudFront)."""
+    r = client.options(
+        "/api/chat",
+        headers={
+            "Origin": "http://localhost:4200",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,x-amz-content-sha256",
+        },
+    )
+    assert r.status_code == 200
+    assert "x-amz-content-sha256" in r.headers["access-control-allow-headers"].lower()

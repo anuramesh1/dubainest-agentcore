@@ -12,8 +12,8 @@ The design is in [`docs/00-spec.md`](docs/00-spec.md). This repo is built step b
 | 2 | `api/`: properties, facets, enquiries, property-intro | ✅ done |
 | 3 | `agent/` LangGraph graph, run in-process | ✅ done |
 | 4 | Chat relay (local) + `scripts/build_index.py` | ✅ done |
-| 5 | CDK: api Lambda + Function URL behind CloudFront | next |
-| 6 | AgentCore Runtime | |
+| 5 | CDK: api Lambda + Function URL behind CloudFront | ✅ done |
+| 6 | AgentCore Runtime | next |
 | 7 | Relay wired to AgentCore, caps, budget | |
 | 8 | Destroy the old backend stacks, 7-day cost check | |
 
@@ -22,16 +22,16 @@ The design is in [`docs/00-spec.md`](docs/00-spec.md). This repo is built step b
 ```
 dubainest-agentcore/
 ├── frontend/   # Angular 17 + Tailwind, copied from dubainest-ai (build warnings fixed)
-├── api/        # FastAPI: listings, enquiries, property-intro, chat relay (+ tests)
+├── api/        # FastAPI: listings, enquiries, property-intro, chat relay (+ tests, Dockerfile)
 ├── agent/      # LangGraph StateGraph: router → specialist(s) → writer (+ tests)
 ├── evals/      # Bedrock evals: routing, grounding, cost (spec §10)
 ├── data/       # mock_properties.py (20 listings: DAMAC 7, Emaar 8, Nakheel 5), area_stats.json
-├── infra/      # CDK (TypeScript): FrontendStack, ObservabilityStack
-├── scripts/    # seed_properties.py, upload_photos.sh
+├── infra/      # CDK (TypeScript): ApiStack, FrontendStack, ObservabilityStack
+├── scripts/    # seed_properties.py, build_index.py, upload_photos.sh, deploy.sh, smoke.sh
 └── docs/       # 00-spec.md, architecture.png; legacy/ holds the dubainest-ai docs
 ```
 
-`api/Dockerfile` comes with the Lambda in step 5; `agent/main.py` and `agent/Dockerfile` with AgentCore in step 6.
+`agent/main.py` and `agent/Dockerfile` come with AgentCore in step 6.
 
 ## What step 1 removed, and why
 
@@ -116,6 +116,27 @@ Last run (3 consecutive): routing 40/40, grounding 20/20, every question in 2 mo
 .venv/bin/ruff check api agent evals scripts data
 cd frontend && npm run build
 cd infra && npx cdk synth
+```
+
+## Deploy (step 5)
+
+```
+browser ─▶ CloudFront ─┬─ /*      ─▶ S3 (Angular build)
+                       └─ /api/*  ─▶ Lambda Function URL (AWS_IAM, RESPONSE_STREAM)
+                                       └─ api/ image: FastAPI under Lambda Web Adapter
+                                            └─ DynamoDB (shared tables)
+```
+
+- **api Lambda** ([infra/lib/api-stack.ts](infra/lib/api-stack.ts)): the same FastAPI app as local, packaged by [api/Dockerfile](api/Dockerfile) (arm64, Python 3.12, Lambda Web Adapter so `POST /api/chat` streams). 512 MB, 60 s timeout, reserved concurrency 3, logs kept 7 days. Its role can scan Properties and put items in Leads, nothing else.
+- **Function URL is IAM-only.** CloudFront signs every `/api/*` request (origin access control), so the URL can't be called directly. Lambda needs a body hash on signed POSTs, which CloudFront can't compute, so the UI sends `x-amz-content-sha256` itself ([signed-body.ts](frontend/src/app/services/signed-body.ts)).
+- **SPA routing** is a CloudFront Function on the S3 behaviour (paths without a file extension → `index.html`), not distribution-wide error pages, so the api's 403/404 reach the browser as JSON.
+- **Chat on AWS** answers with a polite `error` event until step 7 wires the relay to AgentCore (the agent isn't in the api image). Local chat is unchanged.
+- **Idle cost:** the api image in ECR (~0.3 GB, about $0.03/month); Lambda, CloudFront and S3 sit in free tiers at this traffic.
+
+```bash
+scripts/deploy.sh            # needs Docker running (REQUIRE_APPROVAL=never skips CDK's IAM prompt when there's no terminal): cdk deploy Api + Frontend stacks, upload UI, invalidate, smoke test
+scripts/deploy.sh --site     # UI only
+scripts/smoke.sh https://<distribution>.cloudfront.net   # read-only checks
 ```
 
 ## Data

@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
+import { ApiStack } from "../lib/api-stack";
 import { FrontendStack } from "../lib/frontend-stack";
 import { ObservabilityStack } from "../lib/observability-stack";
 
-// Build step 1: only the stacks that bill nothing while idle remain.
+// Only stacks that bill nothing (or cents) while idle.
 //
 // Removed with the Fargate backend: NetworkStack (VPC + NAT), BackendStack
 // (ECS + ALB), VectorStack (OpenSearch Serverless, never deployed).
@@ -14,8 +15,8 @@ import { ObservabilityStack } from "../lib/observability-stack";
 // with DubaiNestAgentCore / dubainest-agentcore, so a deploy from this folder
 // can never update the old DubaiNest* stacks.
 //
-// Coming next: ApiStack (Lambda + Function URL) in step 5, AgentStack
-// (AgentCore Runtime) in step 6.
+// ApiStack (Lambda + Function URL) since step 5; AgentStack (AgentCore
+// Runtime) arrives in step 6. Deploy with scripts/deploy.sh.
 
 const app = new cdk.App();
 
@@ -27,9 +28,16 @@ const alertEmail: string | undefined = app.node.tryGetContext("alertEmail");
 const monthlyBudgetUsd = Number(
   app.node.tryGetContext("monthlyBudgetUsd") ?? "10",
 );
-// Placeholder until step 5 replaces the /api/* origin with the Function URL.
-const apiOriginDomain =
-  app.node.tryGetContext("apiOriginDomain") ?? "api-not-deployed.invalid";
+const envName = isProd ? "prod" : "dev";
+// Shared with dubainest-ai's DataStack, which owns them.
+const propertiesTableName =
+  app.node.tryGetContext("propertiesTable") ??
+  `dubainest-properties-${envName}`;
+const leadsTableName =
+  app.node.tryGetContext("leadsTable") ?? `dubainest-leads-${envName}`;
+// The assets CloudFront base for photos, e.g. https://<domain>/media/photos.
+// scripts/deploy.sh reads it from DubaiNestDataStack's AssetsCloudFrontDomain.
+const mediaBaseUrl: string = app.node.tryGetContext("mediaBaseUrl") ?? "";
 
 // The CDK CLI fills CDK_DEFAULT_ACCOUNT from your AWS credentials.
 const env: cdk.Environment = {
@@ -40,10 +48,19 @@ const stackProps: cdk.StackProps = { env };
 
 // ── Stacks ────────────────────────────────────────────────────────────────────
 
+const api = new ApiStack(app, "DubaiNestAgentCoreApiStack", {
+  ...stackProps,
+  isProd,
+  propertiesTableName,
+  leadsTableName,
+  mediaBaseUrl,
+  description: "DubaiNest AgentCore — api Lambda (Function URL, streaming)",
+});
+
 new FrontendStack(app, "DubaiNestAgentCoreFrontendStack", {
   ...stackProps,
   isProd,
-  apiOriginDomain,
+  apiFunctionUrl: api.functionUrl,
   description: "DubaiNest AgentCore — Angular SPA (S3 + CloudFront)",
 });
 

@@ -1,0 +1,102 @@
+import * as path from "path";
+import * as cdk from "aws-cdk-lib";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as ecrAssets from "aws-cdk-lib/aws-ecr-assets";
+import * as iam from "aws-cdk-lib/aws-iam";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as logs from "aws-cdk-lib/aws-logs";
+import { Construct } from "constructs";
+
+export interface ApiStackProps extends cdk.StackProps {
+  // Shared with dubainest-ai (spec §13 decision 5): referenced by name only.
+  readonly propertiesTableName: string;
+  readonly leadsTableName: string;
+  // e.g. https://<assets-cloudfront-domain>/media/photos (empty = no rewrite)
+  readonly mediaBaseUrl: string;
+  readonly isProd?: boolean;
+}
+
+/**
+ * The api Lambda (spec §4, build step 5): the FastAPI app in api/ as an arm64
+ * container image, run by Lambda Web Adapter so responses stream.
+ *
+ * Its Function URL is AWS_IAM: only the CloudFront distribution (origin access
+ * control, wired in FrontendStack) may call it, so the public cannot bypass
+ * CloudFront. No VPC, no ALB: nothing here bills while idle except the image
+ * in ECR (~0.3 GB).
+ */
+export class ApiStack extends cdk.Stack {
+  public readonly fn: lambda.DockerImageFunction;
+  public readonly functionUrl: lambda.FunctionUrl;
+
+  constructor(scope: Construct, id: string, props: ApiStackProps) {
+    super(scope, id, props);
+    const env = props.isProd ? "prod" : "dev";
+
+    const logGroup = new logs.LogGroup(this, "ApiLogs", {
+      logGroupName: `/aws/lambda/dubainest-agentcore-api-${env}`,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    this.fn = new lambda.DockerImageFunction(this, "ApiFunction", {
+      functionName: `dubainest-agentcore-api-${env}`,
+      description: "DubaiNest AgentCore api: listings, enquiries, chat relay",
+      code: lambda.DockerImageCode.fromImageAsset(
+        path.join(__dirname, "..", "..", "api"),
+        { platform: ecrAssets.Platform.LINUX_ARM64 },
+      ),
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 512,
+      // A chat answer streams for ~5-15 s; leave room for an AgentCore cold start.
+      timeout: cdk.Duration.seconds(60),
+      // Spec §8: a hard ceiling on parallel work behind a public endpoint.
+      reservedConcurrentExecutions: 3,
+      logGroup,
+      environment: {
+        AWS_LWA_INVOKE_MODE: "response_stream",
+        DYNAMODB_PROPERTIES_TABLE: props.propertiesTableName,
+        DYNAMODB_LEADS_TABLE: props.leadsTableName,
+        MEDIA_BASE_URL: props.mediaBaseUrl,
+        // The agent is not in this image; the AgentCore relay arrives in step 7.
+        AGENT_MODE: "agentcore",
+        // Same origin behind CloudFront, so no browser CORS is needed.
+        ALLOWED_ORIGINS: "",
+      },
+    });
+
+    const properties = dynamodb.Table.fromTableName(
+      this,
+      "PropertiesTable",
+      props.propertiesTableName,
+    );
+    const leads = dynamodb.Table.fromTableName(
+      this,
+      "LeadsTable",
+      props.leadsTableName,
+    );
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["dynamodb:Scan", "dynamodb:GetItem"],
+        resources: [properties.tableArn],
+      }),
+    );
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["dynamodb:PutItem"],
+        resources: [leads.tableArn],
+      }),
+    );
+
+    this.functionUrl = this.fn.addFunctionUrl({
+      authType: lambda.FunctionUrlAuthType.AWS_IAM,
+      invokeMode: lambda.InvokeMode.RESPONSE_STREAM,
+    });
+
+    new cdk.CfnOutput(this, "ApiFunctionName", { value: this.fn.functionName });
+    new cdk.CfnOutput(this, "ApiFunctionUrl", {
+      value: this.functionUrl.url,
+      description: "IAM-only: call it through CloudFront /api/*",
+    });
+  }
+}

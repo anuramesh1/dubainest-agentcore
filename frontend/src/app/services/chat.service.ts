@@ -1,6 +1,7 @@
 import { Injectable, inject, signal } from "@angular/core";
 import { HttpClient } from "@angular/common/http";
 import { environment } from "../../environments/environment";
+import { signedJson } from "./signed-body";
 
 export interface ChatTurn {
   role: "user" | "assistant";
@@ -77,13 +78,8 @@ export class ChatService {
     };
 
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      const { body, headers } = await signedJson(payload);
+      const response = await fetch(url, { method: "POST", headers, body });
 
       if (!response.ok || !response.body) {
         console.error("Chat stream failed:", response.status);
