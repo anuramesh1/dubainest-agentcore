@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>DubaiNest AI — Project Requirements Document</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --gold: #C9A84C;
+    --gold-light: #E8D5A3;
+    --gold-dim: #8a6e2f;
+    --bg: #0D0F14;
+    --bg2: #13161D;
+    --bg3: #1A1E28;
+    --bg4: #222636;
+    --border: rgba(201,168,76,0.18);
+    --border-dim: rgba(255,255,255,0.07);
+    --text: #E8E6DF;
+    --text-muted: #8B8880;
+    --text-dim: #555250;
+    --teal: #3ABFA0;
+    --blue: #4A9EDB;
+    --purple: #8B7FD4;
+    --coral: #E07A5F;
+    --green: #5BAD7A;
+    --pink: #D4698C;
+    --amber: #E0A030;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    font-size: 15px;
+  }
+
+  /* ── Header ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 3rem 0 2.5rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  header::before {
+    content: '';
+    position: absolute;
+    top: -60px; left: 50%;
+    transform: translateX(-50%);
+    width: 600px; height: 300px;
+    background: radial-gradient(ellipse, rgba(201,168,76,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .eyebrow {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+  }
+  header h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    margin-bottom: 0.75rem;
+  }
+  header h1 span { color: var(--gold); }
+  .tagline {
+    color: var(--text-muted);
+    font-size: 15px;
+    max-width: 560px;
+    margin: 0 auto 1.5rem;
+  }
+  .meta-row {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .meta-row span { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); display: inline-block; }
+
+  /* ── Layout ── */
+  .container { max-width: 960px; margin: 0 auto; padding: 0 2rem; }
+  .section { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border-dim); }
+  .section:last-child { border-bottom: none; }
+
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: var(--gold-dim);
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+  }
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.6rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    letter-spacing: -0.01em;
+  }
+
+  /* ── Stack grid ── */
+  .stack-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1px;
+    background: var(--border-dim);
+    border: 1px solid var(--border-dim);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .stack-cell {
+    background: var(--bg2);
+    padding: 1rem 1.25rem;
+    transition: background 0.15s;
+  }
+  .stack-cell:hover { background: var(--bg3); }
+  .stack-cell-label { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 4px; font-family: 'DM Mono', monospace; }
+  .stack-cell-value { font-size: 14px; font-weight: 500; color: var(--text); }
+  .stack-cell-note { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  /* ── Phase timeline ── */
+  .phase-list { display: flex; flex-direction: column; gap: 0; }
+  .phase-item {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 0;
+    position: relative;
+  }
+  .phase-item::before {
+    content: '';
+    position: absolute;
+    left: 108px;
+    top: 28px;
+    bottom: -1px;
+    width: 1px;
+    background: var(--border-dim);
+  }
+  .phase-item:last-child::before { display: none; }
+
+  .phase-meta {
+    padding: 1.25rem 1.5rem 1.25rem 0;
+    text-align: right;
+  }
+  .phase-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .phase-days {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .phase-node {
+    position: absolute;
+    left: 102px;
+    top: 22px;
+    width: 13px; height: 13px;
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+    z-index: 1;
+  }
+
+  .phase-body {
+    padding: 1.25rem 0 1.25rem 2rem;
+    border-left: 1px solid var(--border-dim);
+  }
+  .phase-title-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+  .phase-name { font-size: 15px; font-weight: 600; }
+  .star-badge {
+    font-size: 10px;
+    background: rgba(201,168,76,0.15);
+    color: var(--gold);
+    border: 1px solid rgba(201,168,76,0.3);
+    border-radius: 99px;
+    padding: 2px 8px;
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+  .phase-desc { font-size: 13px; color: var(--text-muted); line-height: 1.6; margin-bottom: 0.75rem; }
+  .task-list { list-style: none; display: flex; flex-direction: column; gap: 4px; }
+  .task-list li {
+    font-size: 13px;
+    color: var(--text-muted);
+    padding-left: 16px;
+    position: relative;
+  }
+  .task-list li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+  .task-list li strong { color: var(--text); font-weight: 500; }
+
+  /* ── Agents ── */
+  .agents-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 10px;
+  }
+  .agent-card {
+    background: var(--bg2);
+    border: 1px solid var(--border-dim);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .agent-card:hover { border-color: var(--border); background: var(--bg3); }
+  .agent-icon { font-size: 20px; margin-bottom: 8px; }
+  .agent-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .agent-role { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+  /* ── Cost table ── */
+  .cost-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .cost-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border-dim);
+    font-family: 'DM Mono', monospace;
+    font-weight: 400;
+  }
+  .cost-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border-dim);
+    color: var(--text-muted);
+  }
+  .cost-table td:first-child { color: var(--text); font-weight: 500; }
+  .cost-table tr:last-child td { border-bottom: none; }
+  .cost-table tr:hover td { background: var(--bg3); }
+  .cost-total-row td {
+    color: var(--gold) !important;
+    font-weight: 600 !important;
+    border-top: 1px solid var(--border);
+    border-bottom: none !important;
+    background: rgba(201,168,76,0.04);
+  }
+
+  /* ── Portfolio extras ── */
+  .extras-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 10px;
+  }
+  .extra-card {
+    background: var(--bg2);
+    border: 1px solid var(--border-dim);
+    border-radius: 10px;
+    padding: 1.1rem 1.25rem;
+  }
+  .extra-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .extra-badge { font-size: 10px; background: rgba(201,168,76,0.12); color: var(--gold); border-radius: 99px; padding: 1px 7px; font-family: 'DM Mono', monospace; }
+  .extra-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+  /* ── Decision log ── */
+  .decision-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .decision-table th {
+    text-align: left; padding: 8px 12px;
+    font-size: 10px; letter-spacing: 0.15em;
+    text-transform: uppercase; color: var(--text-dim);
+    border-bottom: 1px solid var(--border-dim);
+    font-family: 'DM Mono', monospace; font-weight: 400;
+  }
+  .decision-table td { padding: 10px 12px; border-bottom: 1px solid var(--border-dim); vertical-align: top; color: var(--text-muted); }
+  .decision-table td:first-child { color: var(--text); font-weight: 500; width: 140px; }
+  .decision-table td:nth-child(2) { color: var(--teal); width: 160px; }
+  .decision-table tr:last-child td { border-bottom: none; }
+
+  /* ── Session log ── */
+  .session-box {
+    background: var(--bg2);
+    border: 1px solid var(--border-dim);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+  }
+  .session-title { font-size: 13px; font-weight: 600; margin-bottom: 0.75rem; color: var(--text-muted); font-family: 'DM Mono', monospace; letter-spacing: 0.05em; }
+  .session-entry {
+    display: flex;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-dim);
+    font-size: 13px;
+  }
+  .session-entry:last-child { border-bottom: none; }
+  .session-date { color: var(--text-dim); font-family: 'DM Mono', monospace; font-size: 11px; min-width: 90px; padding-top: 1px; }
+  .session-note { color: var(--text-muted); }
+  .session-note strong { color: var(--text); font-weight: 500; }
+
+  /* ── Footer ── */
+  footer {
+    text-align: center;
+    padding: 2.5rem 0;
+    font-size: 12px;
+    color: var(--text-dim);
+    border-top: 1px solid var(--border-dim);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Color accents per phase ── */
+  .c-teal  { background: var(--teal);   }
+  .c-blue  { background: var(--blue);   }
+  .c-purple{ background: var(--purple); }
+  .c-amber { background: var(--amber);  }
+  .c-pink  { background: var(--pink);   }
+  .c-coral { background: var(--coral);  }
+  .c-green { background: var(--green);  }
+  .c-gray  { background: #555;          }
+
+  @media (max-width: 640px) {
+    .phase-item { grid-template-columns: 80px 1fr; }
+    .phase-node { left: 68px; }
+    .phase-item::before { left: 74px; }
+    .meta-row { gap: 1rem; }
+  }
+
+  @media print {
+    body { background: #fff; color: #000; }
+    header::before { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<header>
+  <div class="container">
+    <p class="eyebrow">Project Requirements Document · v1.0</p>
+    <h1><span>DubaiNest</span> AI</h1>
+    <p class="tagline">A multi-agent AI real estate enquiry platform for the Dubai property market — portfolio project showcasing Agentic AI, cloud architecture, and full-stack engineering.</p>
+    <div class="meta-row">
+      <span><span class="dot"></span> Started: May 2026</span>
+      <span><span class="dot"></span> Target: 14 days</span>
+      <span><span class="dot"></span> Author: IT Professional (15 yrs Java)</span>
+      <span><span class="dot"></span> Status: Planning complete</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ══ VISION ══ -->
+  <div class="section">
+    <p class="section-label">01 · Vision</p>
+    <h2 class="section-title">What we're building</h2>
+    <p style="color:var(--text-muted); max-width:680px; margin-bottom:1rem;">
+      DubaiNest AI is a real estate enquiry website where users can ask questions in natural language about Dubai properties. Behind the chatbot, multiple specialised AI agents collaborate — one searches listings, another analyses market trends, another calculates ROI, and another schedules viewings. The system uses Claude Sonnet (via Amazon Bedrock) as its intelligence layer, orchestrated by LangGraph's multi-agent state graph.
+    </p>
+    <p style="color:var(--text-muted); max-width:680px;">
+      This is a learning project designed to demonstrate agentic AI architecture, cloud-native deployment on AWS, CI/CD pipelines, and production-grade engineering thinking — all within a 2-week build sprint.
+    </p>
+  </div>
+
+  <!-- ══ TECH STACK ══ -->
+  <div class="section">
+    <p class="section-label">02 · Tech Stack</p>
+    <h2 class="section-title">Confirmed technology choices</h2>
+    <div class="stack-grid">
+      <div class="stack-cell">
+        <div class="stack-cell-label">Frontend</div>
+        <div class="stack-cell-value">Angular 17+</div>
+        <div class="stack-cell-note">Standalone components · TypeScript-first</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">Styling</div>
+        <div class="stack-cell-value">Tailwind CSS</div>
+        <div class="stack-cell-note">Utility-first · dark/light modes</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">Maps</div>
+        <div class="stack-cell-value">Leaflet + ngx-leaflet</div>
+        <div class="stack-cell-note">Free · no API key required</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">Backend</div>
+        <div class="stack-cell-value">FastAPI (Python 3.11)</div>
+        <div class="stack-cell-note">Pydantic · WebSocket · async</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">Agent Framework</div>
+        <div class="stack-cell-value">LangGraph</div>
+        <div class="stack-cell-note">Multi-agent state graph · visual</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">AI Model</div>
+        <div class="stack-cell-value">Claude Sonnet 4</div>
+        <div class="stack-cell-note">Amazon Bedrock · pay-per-token</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">Database</div>
+        <div class="stack-cell-value">DynamoDB</div>
+        <div class="stack-cell-note">On-demand · + S3 for documents</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">Vector DB (local)</div>
+        <div class="stack-cell-value">ChromaDB</div>
+        <div class="stack-cell-note">In-process · zero cost · RAG dev</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">Vector DB (AWS)</div>
+        <div class="stack-cell-value">OpenSearch Serverless</div>
+        <div class="stack-cell-note">Swapped in at deploy time</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">Frontend host</div>
+        <div class="stack-cell-value">S3 + CloudFront</div>
+        <div class="stack-cell-note">ng build → static bundle</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">Backend host</div>
+        <div class="stack-cell-value">AWS Lambda</div>
+        <div class="stack-cell-note">Mangum adapter for FastAPI</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">CI/CD</div>
+        <div class="stack-cell-value">GitHub Actions</div>
+        <div class="stack-cell-note">Docker · ECR · auto-deploy</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">Infrastructure</div>
+        <div class="stack-cell-value">AWS CDK / Terraform</div>
+        <div class="stack-cell-note">IaC for reproducibility</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">Cost guard</div>
+        <div class="stack-cell-value">AWS Budgets</div>
+        <div class="stack-cell-note">Alert at $10/month</div>
+      </div>
+      <div class="stack-cell">
+        <div class="stack-cell-label">Co-author AI</div>
+        <div class="stack-cell-value">Claude (claude.ai)</div>
+        <div class="stack-cell-note">Pro plan · daily sessions</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PHASE PLAN ══ -->
+  <div class="section">
+    <p class="section-label">03 · Phase Plan</p>
+    <h2 class="section-title">14-day build roadmap</h2>
+    <div class="phase-list">
+
+      <!-- Phase 1 -->
+      <div class="phase-item">
+        <div class="phase-meta">
+          <div class="phase-num">Phase 1</div>
+          <div class="phase-days">Day 1–2</div>
+        </div>
+        <div class="phase-node c-teal"></div>
+        <div class="phase-body">
+          <div class="phase-title-row">
+            <span class="phase-name">Foundation &amp; GitHub setup</span>
+          </div>
+          <p class="phase-desc">Establish the monorepo structure, developer tooling, and project conventions before any feature code is written.</p>
+          <ul class="task-list">
+            <li><strong>GitHub monorepo</strong> — /frontend, /backend, /agents, /infra, /docs folders</li>
+            <li><strong>Branch strategy</strong> — main (prod), develop (integration), feature/* branches</li>
+            <li><strong>Pre-commit hooks</strong> — Black (Python), Prettier (Angular), ESLint</li>
+            <li><strong>docker-compose.yml</strong> — run entire stack locally with one command</li>
+            <li><strong>Root README.md</strong> — architecture diagram, setup instructions, tech decisions</li>
+            <li><strong>.gitignore</strong> — Python, Angular, Terraform, .env files</li>
+            <li><strong>GitHub Issues</strong> — create one issue per phase as project tracking</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Phase 2 -->
+      <div class="phase-item">
+        <div class="phase-meta">
+          <div class="phase-num">Phase 2</div>
+          <div class="phase-days">Day 2–4</div>
+        </div>
+        <div class="phase-node c-blue"></div>
+        <div class="phase-body">
+          <div class="phase-title-row">
+            <span class="phase-name">Angular frontend — chatbot UI</span>
+          </div>
+          <p class="phase-desc">Build the user-facing application: property listings, an AI chatbot widget, and a map view, in Angular 17 with Tailwind CSS.</p>
+          <ul class="task-list">
+            <li><strong>Angular 17 scaffold</strong> — standalone components, no NgModule boilerplate</li>
+            <li><strong>Tailwind CSS</strong> — integrated with Angular build pipeline</li>
+            <li><strong>Chatbot widget</strong> — streaming SSE responses from backend, typing indicator</li>
+            <li><strong>Property listing page</strong> — card grid with filters (area, price, type)</li>
+            <li><strong>Property detail page</strong> — images, specs, ROI summary, enquiry CTA</li>
+            <li><strong>Leaflet map view</strong> — ngx-leaflet, property pins, area overlays</li>
+            <li><strong>Arabic/English toggle</strong> ★ — i18n with Angular's built-in i18n or ngx-translate</li>
+            <li><strong>Responsive layout</strong> — mobile-first, works on all screen sizes</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Phase 3 -->
+      <div class="phase-item">
+        <div class="phase-meta">
+          <div class="phase-num">Phase 3</div>
+          <div class="phase-days">Day 4–6</div>
+        </div>
+        <div class="phase-node c-purple"></div>
+        <div class="phase-body">
+          <div class="phase-title-row">
+            <span class="phase-name">FastAPI backend + data layer</span>
+          </div>
+          <p class="phase-desc">Build the API layer that connects the frontend to the agent system, and populate the database with real Dubai property data.</p>
+          <ul class="task-list">
+            <li><strong>FastAPI app</strong> — async, Pydantic v2 schemas, automatic OpenAPI docs</li>
+            <li><strong>REST endpoints</strong> — /properties, /search, /enquiry, /health</li>
+            <li><strong>WebSocket endpoint</strong> — /ws/chat for streaming agent responses</li>
+            <li><strong>DynamoDB models</strong> — Property, Conversation, Lead tables</li>
+            <li><strong>Property data scraper</strong> — Bayut / Property Finder public listings (BeautifulSoup)</li>
+            <li><strong>Mangum adapter</strong> — wraps FastAPI for AWS Lambda deployment</li>
+            <li><strong>Environment config</strong> — .env via pydantic-settings, per-environment overrides</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Phase 4 -->
+      <div class="phase-item">
+        <div class="phase-meta">
+          <div class="phase-num">Phase 4</div>
+          <div class="phase-days">Day 6–9</div>
+        </div>
+        <div class="phase-node c-amber"></div>
+        <div class="phase-body">
+          <div class="phase-title-row">
+            <span class="phase-name">LangGraph multi-agent core</span>
+            <span class="star-badge">★ centrepiece</span>
+          </div>
+          <p class="phase-desc">Design and implement the 5-agent collaboration graph. This is the core differentiator of the project — each agent is a specialised node in a LangGraph state machine.</p>
+          <ul class="task-list">
+            <li><strong>LangGraph state graph</strong> — typed AgentState, conditional edges, human-in-loop checkpoints</li>
+            <li><strong>Orchestrator agent</strong> — intent classification, routes to correct specialist</li>
+            <li><strong>Property Search agent</strong> — queries DynamoDB, filters, ranks results</li>
+            <li><strong>Market Intelligence agent</strong> — price trends, area statistics, supply/demand from public data</li>
+            <li><strong>ROI Calculator agent</strong> ★ — rental yield %, mortgage vs cash analysis, break-even years</li>
+            <li><strong>Scheduler agent</strong> — captures viewing preferences, confirms slots</li>
+            <li><strong>RAG pipeline</strong> — ChromaDB locally, embeddings via Bedrock Titan, document chunking</li>
+            <li><strong>Agent memory</strong> — conversation history persisted to DynamoDB per session</li>
+            <li><strong>Bedrock integration</strong> — Claude Sonnet via boto3 / LangChain Bedrock wrapper</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Phase 5 -->
+      <div class="phase-item">
+        <div class="phase-meta">
+          <div class="phase-num">Phase 5</div>
+          <div class="phase-days">Day 9–10</div>
+        </div>
+        <div class="phase-node c-pink"></div>
+        <div class="phase-body">
+          <div class="phase-title-row">
+            <span class="phase-name">Observability dashboard</span>
+            <span class="star-badge">★ wow-factor</span>
+          </div>
+          <p class="phase-desc">A live admin dashboard showing which agent handled each turn, latency breakdowns, and token cost — demonstrating production engineering awareness.</p>
+          <ul class="task-list">
+            <li><strong>Agent trace view</strong> — per-conversation timeline of agent handoffs</li>
+            <li><strong>Latency chart</strong> — per-agent response time histogram</li>
+            <li><strong>Token cost tracker</strong> — cumulative Bedrock spend by session and agent</li>
+            <li><strong>Live log stream</strong> — WebSocket feed of real-time agent activity</li>
+            <li><strong>CloudWatch integration</strong> — structured JSON logs, custom metrics namespace</li>
+            <li><strong>Angular component</strong> — dedicated /admin/observability route, protected route guard</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Phase 6 -->
+      <div class="phase-item">
+        <div class="phase-meta">
+          <div class="phase-num">Phase 6</div>
+          <div class="phase-days">Day 10–11</div>
+        </div>
+        <div class="phase-node c-coral"></div>
+        <div class="phase-body">
+          <div class="phase-title-row">
+            <span class="phase-name">CI/CD — GitHub Actions pipeline</span>
+          </div>
+          <p class="phase-desc">Automated testing and deployment pipeline that runs on every push and deploys to AWS on merge to main.</p>
+          <ul class="task-list">
+            <li><strong>Backend pipeline</strong> — pytest, mypy type check, Black lint, Docker build, push to ECR</li>
+            <li><strong>Frontend pipeline</strong> — ng test (Karma/Jest), ng build, upload to S3, CloudFront invalidation</li>
+            <li><strong>Environment secrets</strong> — AWS credentials, Bedrock config via GitHub Secrets</li>
+            <li><strong>PR checks</strong> — all checks must pass before merge to develop or main</li>
+            <li><strong>Deploy on merge</strong> — main branch triggers Lambda update + CloudFront deploy</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Phase 7 -->
+      <div class="phase-item">
+        <div class="phase-meta">
+          <div class="phase-num">Phase 7</div>
+          <div class="phase-days">Day 11–13</div>
+        </div>
+        <div class="phase-node c-green"></div>
+        <div class="phase-body">
+          <div class="phase-title-row">
+            <span class="phase-name">AWS deployment</span>
+          </div>
+          <p class="phase-desc">Deploy the full stack to AWS within a strict cost budget. Infrastructure defined as code for reproducibility.</p>
+          <ul class="task-list">
+            <li><strong>S3 + CloudFront</strong> — Angular static bundle, HTTPS, global CDN</li>
+            <li><strong>AWS Lambda</strong> — FastAPI via Mangum, 512MB memory, 30s timeout</li>
+            <li><strong>API Gateway</strong> — HTTP API + WebSocket API for chat streaming</li>
+            <li><strong>Amazon Bedrock</strong> — Claude Sonnet model, us-east-1 region (best availability)</li>
+            <li><strong>DynamoDB</strong> — on-demand billing, TTL on conversation records (90 days)</li>
+            <li><strong>OpenSearch Serverless</strong> — swaps in for ChromaDB, 1 OCU minimum</li>
+            <li><strong>AWS CDK / Terraform</strong> — all infra as code in /infra folder</li>
+            <li><strong>AWS Budgets</strong> — $10/month alert, $20/month hard notification</li>
+            <li><strong>IAM roles</strong> — least-privilege, separate roles for Lambda and CI/CD</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Phase 8 -->
+      <div class="phase-item">
+        <div class="phase-meta">
+          <div class="phase-num">Phase 8</div>
+          <div class="phase-days">Day 13–14</div>
+        </div>
+        <div class="phase-node c-gray"></div>
+        <div class="phase-body">
+          <div class="phase-title-row">
+            <span class="phase-name">Docs, demo video + portfolio wrap</span>
+          </div>
+          <p class="phase-desc">Polish the project for portfolio presentation — documentation, a live demo, and preparation for interview questions.</p>
+          <ul class="task-list">
+            <li><strong>Architecture diagram</strong> — production-quality, saved to /docs/architecture.png</li>
+            <li><strong>README overhaul</strong> — local setup in &lt;5 commands, screenshots, live URL</li>
+            <li><strong>Loom demo video</strong> — 3–5 min walkthrough of user journey + observability dashboard</li>
+            <li><strong>Interview cheat sheet</strong> — /docs/DECISIONS.md, why each tech was chosen</li>
+            <li><strong>Cost report</strong> — real AWS bill for the build period, annotated</li>
+            <li><strong>Seed data</strong> — 50+ realistic Dubai property listings for demo</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══ AGENTS ══ -->
+  <div class="section">
+    <p class="section-label">04 · Agent Design</p>
+    <h2 class="section-title">5-agent collaboration model</h2>
+    <p style="color:var(--text-muted); margin-bottom:1.25rem; max-width:620px; font-size:14px;">All agents share a typed <code style="background:var(--bg3); padding:1px 6px; border-radius:4px; font-family:'DM Mono',monospace; font-size:12px;">AgentState</code> object. The Orchestrator routes intent via conditional edges; specialists return results back to state. Claude Sonnet is the LLM backbone for all agents.</p>
+    <div class="agents-grid">
+      <div class="agent-card">
+        <div class="agent-icon">🧠</div>
+        <div class="agent-name">Orchestrator</div>
+        <div class="agent-role">Classifies user intent, maintains conversation state, routes to the right specialist agent, synthesises final response.</div>
+      </div>
+      <div class="agent-card">
+        <div class="agent-icon">🔍</div>
+        <div class="agent-name">Property Search</div>
+        <div class="agent-role">Queries DynamoDB listings, applies filters (area, budget, bedrooms, type), ranks results by relevance.</div>
+      </div>
+      <div class="agent-card">
+        <div class="agent-icon">📊</div>
+        <div class="agent-name">Market Intelligence</div>
+        <div class="agent-role">Fetches price-per-sqft trends, area statistics, supply/demand data from public Dubai land department data.</div>
+      </div>
+      <div class="agent-card">
+        <div class="agent-icon">💰</div>
+        <div class="agent-name">ROI Calculator ★</div>
+        <div class="agent-role">Computes rental yield %, mortgage vs cash-buy comparison, break-even analysis, and 5-year appreciation estimate.</div>
+      </div>
+      <div class="agent-card">
+        <div class="agent-icon">📅</div>
+        <div class="agent-name">Scheduler</div>
+        <div class="agent-role">Captures viewing preferences (date, time, in-person vs virtual), confirms appointment slot, stores lead in DynamoDB.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PORTFOLIO EXTRAS ══ -->
+  <div class="section">
+    <p class="section-label">05 · Portfolio Differentiators</p>
+    <h2 class="section-title">What makes this stand out</h2>
+    <div class="extras-grid">
+      <div class="extra-card">
+        <div class="extra-title">Observability dashboard <span class="extra-badge">★ selected</span></div>
+        <div class="extra-desc">Live view of agent handoffs, per-agent latency, token costs, and log stream. Shows production-readiness thinking beyond just "it works".</div>
+      </div>
+      <div class="extra-card">
+        <div class="extra-title">ROI Calculator agent <span class="extra-badge">★ selected</span></div>
+        <div class="extra-desc">Turns the chatbot from an information tool into an active decision-support tool. Rental yield, mortgage analysis, break-even — domain-aware AI.</div>
+      </div>
+      <div class="extra-card">
+        <div class="extra-title">Arabic / English toggle <span class="extra-badge">★ selected</span></div>
+        <div class="extra-desc">Dubai's market is bilingual. One-click language switch using Angular i18n. Demonstrates product awareness and real-world market fit thinking.</div>
+      </div>
+      <div class="extra-card">
+        <div class="extra-title">Swappable vector DB design</div>
+        <div class="extra-desc">ChromaDB locally → OpenSearch on AWS. The abstraction layer means zero agent code changes at deploy time. Great architecture story for interviews.</div>
+      </div>
+      <div class="extra-card">
+        <div class="extra-title">End-to-end type safety</div>
+        <div class="extra-desc">TypeScript on Angular + Pydantic on FastAPI + typed AgentState in LangGraph. Full type coverage from UI to AI layer — rare in portfolio projects.</div>
+      </div>
+      <div class="extra-card">
+        <div class="extra-title">Infrastructure as Code</div>
+        <div class="extra-desc">All AWS resources defined in CDK/Terraform. One command to spin up a fresh environment. Demonstrates DevOps maturity beyond just deploying manually.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ COST ══ -->
+  <div class="section">
+    <p class="section-label">06 · Cost Estimate</p>
+    <h2 class="section-title">Estimated AWS monthly spend</h2>
+    <table class="cost-table">
+      <thead>
+        <tr>
+          <th>Service</th>
+          <th>Usage assumption</th>
+          <th>Est. monthly cost</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>S3 + CloudFront</td><td>~1GB transfer, ~10k requests</td><td>~$0.50</td><td>Static Angular bundle</td></tr>
+        <tr><td>AWS Lambda</td><td>&lt;1M requests (free tier)</td><td>~$0.00</td><td>Mangum-wrapped FastAPI</td></tr>
+        <tr><td>API Gateway</td><td>~50k API calls</td><td>~$0.18</td><td>HTTP + WebSocket APIs</td></tr>
+        <tr><td>DynamoDB</td><td>On-demand, &lt;1GB</td><td>~$0.25</td><td>Properties + conversations</td></tr>
+        <tr><td>Amazon Bedrock</td><td>~500k tokens/month</td><td>~$2–5</td><td>Claude Sonnet pay-per-token</td></tr>
+        <tr><td>OpenSearch Serverless</td><td>1 OCU minimum</td><td>~$0</td><td>Use ChromaDB locally until needed</td></tr>
+        <tr><td>CloudWatch</td><td>5GB logs</td><td>~$0.50</td><td>Observability dashboard</td></tr>
+        <tr><td>ECR</td><td>&lt;1GB storage</td><td>~$0.10</td><td>Docker images</td></tr>
+        <tr class="cost-total-row"><td>Total estimate</td><td></td><td>~$3.50–7 / month</td><td>Budget alert set at $10</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══ KEY DECISIONS ══ -->
+  <div class="section">
+    <p class="section-label">07 · Decision Log</p>
+    <h2 class="section-title">Architecture decisions &amp; rationale</h2>
+    <table class="decision-table">
+      <thead>
+        <tr><th>Decision</th><th>Choice</th><th>Rationale</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Frontend framework</td><td>Angular 17+</td><td>Java developer familiarity — DI, services, and modules mirror Spring patterns. TypeScript-first by design.</td></tr>
+        <tr><td>Backend language</td><td>Python / FastAPI</td><td>AI/ML ecosystem lingua franca. LangGraph, LangChain, boto3 all Python-native. Pydantic gives Java-like typing.</td></tr>
+        <tr><td>Agent framework</td><td>LangGraph</td><td>Visual state graph = excellent interview demo. Explicit state typing. Supports human-in-the-loop and agent memory out of the box.</td></tr>
+        <tr><td>AI model</td><td>Claude Sonnet via Bedrock</td><td>Enterprise-grade, AWS-native, pay-per-token. Keeps everything in one cloud. No separate API key management.</td></tr>
+        <tr><td>Vector DB strategy</td><td>ChromaDB → OpenSearch</td><td>ChromaDB is zero-cost and in-process for local dev. Swapped for OpenSearch at deploy. Demonstrates good abstraction design.</td></tr>
+        <tr><td>Database</td><td>DynamoDB</td><td>AWS-native, on-demand billing (near-zero for portfolio scale), no server to manage. TTL for conversation cleanup.</td></tr>
+        <tr><td>Backend hosting</td><td>Lambda + Mangum</td><td>Cheapest option at portfolio scale. Lambda free tier covers most of the usage. Mangum adapter = zero code changes.</td></tr>
+        <tr><td>Styling</td><td>Tailwind CSS</td><td>Utility-first works well with Angular. Smaller bundle than Material for a focused project. Modern, portfolio-friendly aesthetic.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ══ SESSION LOG ══ -->
+  <div class="section">
+    <p class="section-label">08 · Session Log</p>
+    <h2 class="section-title">Daily progress tracker</h2>
+    <p style="color:var(--text-muted); font-size:13px; margin-bottom:1rem;">Update this section at the start of each session. Paste the last session summary here so you can resume context with Claude quickly.</p>
+    <div class="session-box">
+      <div class="session-title">// session-log.md — paste summary at start of each day</div>
+      <div class="session-entry">
+        <div class="session-date">2026-05-09</div>
+        <div class="session-note"><strong>Session 1 complete.</strong> Full project plan finalised. Tech stack locked: Angular 17 + Tailwind, FastAPI, LangGraph, Claude Sonnet via Bedrock, DynamoDB, ChromaDB→OpenSearch. 8 phases, 14 days. Portfolio extras: Observability dashboard, ROI Calculator agent, Arabic/English toggle. PRD created. Ready to begin Phase 1 next session.</div>
+      </div>
+      <div class="session-entry">
+        <div class="session-date">— add here —</div>
+        <div class="session-note" style="color:var(--text-dim); font-style:italic;">Copy last session summary here before starting next Claude session</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ HOW TO USE THIS DOC ══ -->
+  <div class="section">
+    <p class="section-label">09 · How to use this document</p>
+    <h2 class="section-title">Resuming context each day</h2>
+    <p style="color:var(--text-muted); font-size:14px; max-width:680px; margin-bottom:1rem;">
+      At the start of each Claude session, paste the following prompt to resume context instantly:
+    </p>
+    <div style="background:var(--bg3); border:1px solid var(--border-dim); border-radius:10px; padding:1.25rem 1.5rem; font-family:'DM Mono',monospace; font-size:12px; color:var(--text-muted); line-height:1.8;">
+      "We are building DubaiNest AI — a Dubai real estate chatbot with multi-agent AI.<br>
+      Tech stack: Angular 17 + Tailwind (frontend), FastAPI Python (backend),<br>
+      LangGraph (agents), Claude Sonnet via Amazon Bedrock (AI), DynamoDB + ChromaDB (data).<br>
+      GitHub monorepo with CI/CD via GitHub Actions, deployed to AWS Lambda + S3/CloudFront.<br>
+      Portfolio extras: Observability dashboard, ROI Calculator agent, Arabic/English toggle.<br>
+      Last session: [paste your session-log entry here].<br>
+      Today we are working on: Phase [N] — [phase name]."
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  DubaiNest AI · Project Requirements Document · v1.0 · Generated May 2026 · Claude co-authored
+</footer>
+
+</body>
+</html>

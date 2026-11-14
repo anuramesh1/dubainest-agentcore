@@ -1,0 +1,502 @@
+<!-- Launcher lives in the navbar (top-right, on the title line). The panel
+     below opens from there or auto-launches a few seconds after page load. -->
+<div *ngIf="isOpen()">
+  <!-- ═══════════════════════ MAXIMIZED VIEW ═══════════════════════════════ -->
+  <ng-container *ngIf="isMaximized(); else compactView">
+    <div class="fixed inset-0 z-50 flex flex-col overflow-hidden bg-slate-50">
+      <!-- Header -->
+      <div
+        class="chat-header chat-header--full flex items-center gap-3 px-6 py-4 select-none"
+      >
+        <div class="chat-avatar">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="white"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+            />
+          </svg>
+        </div>
+        <div class="flex-1">
+          <p class="font-semibold text-white text-sm tracking-wide">
+            {{ i18n.t("chatbot.title") }}
+          </p>
+          <p class="text-xs text-slate-400">
+            Dubai Real Estate Expert · Claude AI
+          </p>
+        </div>
+        <!-- Minimize -->
+        <button
+          (click)="toggleMaximize()"
+          (mousedown)="$event.stopPropagation()"
+          class="chat-icon-btn"
+          title="Minimize"
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="4 14 10 14 10 20" />
+            <polyline points="20 10 14 10 14 4" />
+            <line x1="10" y1="14" x2="3" y2="21" />
+            <line x1="21" y1="3" x2="14" y2="10" />
+          </svg>
+        </button>
+        <!-- Close -->
+        <button
+          (click)="toggle()"
+          (mousedown)="$event.stopPropagation()"
+          class="chat-icon-btn"
+          title="Close"
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Messages -->
+      <div
+        #messagesEl
+        class="flex-1 overflow-y-auto p-6 space-y-4 chat-messages-area"
+      >
+        <div *ngFor="let msg of messages()">
+          <div
+            [class]="
+              msg.role === 'user'
+                ? 'flex justify-end'
+                : 'flex justify-start items-end gap-2'
+            "
+          >
+            <div
+              *ngIf="msg.role === 'assistant'"
+              class="chat-bot-dot shrink-0 mb-1"
+            ></div>
+            <ng-container *ngIf="msg.role === 'user'; else asstMax">
+              <div class="chat-bubble-user max-w-2xl text-sm">
+                {{ msg.content }}
+              </div>
+            </ng-container>
+            <ng-template #asstMax>
+              <div class="chat-bubble-assistant max-w-4xl">
+                <app-markdown-response
+                  [content]="msg.content"
+                  class="block"
+                ></app-markdown-response>
+              </div>
+            </ng-template>
+          </div>
+          <div
+            *ngIf="
+              msg.role === 'assistant' && (msg.suggestions?.length ?? 0) > 0
+            "
+            class="flex flex-wrap gap-2 mt-2 ml-5"
+          >
+            <button
+              *ngFor="let q of msg.suggestions"
+              (click)="sendSuggestion(q)"
+              [disabled]="isTyping()"
+              class="text-xs text-left px-3 py-1.5 rounded-full border border-slate-300 text-slate-700 bg-white hover:bg-indigo-50 hover:border-indigo-400 transition disabled:opacity-50"
+            >
+              {{ q }}
+            </button>
+          </div>
+        </div>
+        <div *ngIf="isTyping()" class="flex justify-start items-end gap-2">
+          <div class="chat-bot-dot shrink-0"></div>
+          <div class="chat-typing-indicator">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="border-t border-slate-200 p-4 flex gap-3 bg-white">
+        <input
+          type="text"
+          [placeholder]="i18n.t('chatbot.placeholder')"
+          [value]="userInput()"
+          (input)="userInput.set($any($event.target).value)"
+          (keydown)="onKeydown($event)"
+          class="chat-input flex-1 text-sm"
+        />
+        <button
+          (click)="send()"
+          [disabled]="!userInput().trim() || isTyping()"
+          class="chat-send-btn"
+        >
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- ═══════════════════════ COMPACT VIEW ═════════════════════════════════ -->
+  <ng-template #compactView>
+    <div
+      id="chatbot-panel"
+      class="chat-panel fixed z-50 flex flex-col overflow-hidden"
+      [class.is-dragging]="isDragging"
+      [ngStyle]="{
+        top: position().top + 'px',
+        left: position().left + 'px',
+        width: windowWidth() + 'px',
+        height: windowHeight() + 'px',
+      }"
+    >
+      <!-- Header (drag zone) -->
+      <div
+        class="chat-header flex items-center gap-2 px-4 py-3 select-none cursor-grab"
+        (mousedown)="onDragStart($event)"
+      >
+        <div class="chat-avatar shrink-0">
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="white"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path
+              d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+            />
+          </svg>
+        </div>
+
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-white text-sm leading-tight truncate">
+            {{ i18n.t("chatbot.title") }}
+          </p>
+          <p class="text-xs text-slate-400 truncate">
+            Dubai Real Estate Expert
+          </p>
+        </div>
+
+        <!-- Drag handle indicator -->
+        <div class="chat-drag-dots shrink-0 mx-1 pointer-events-none">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="currentColor"
+            class="text-slate-600"
+          >
+            <circle cx="4" cy="3" r="1.2" />
+            <circle cx="10" cy="3" r="1.2" />
+            <circle cx="4" cy="7" r="1.2" />
+            <circle cx="10" cy="7" r="1.2" />
+            <circle cx="4" cy="11" r="1.2" />
+            <circle cx="10" cy="11" r="1.2" />
+          </svg>
+        </div>
+
+        <!-- Maximize -->
+        <button
+          (click)="toggleMaximize()"
+          (mousedown)="$event.stopPropagation()"
+          class="chat-icon-btn shrink-0"
+          title="Maximize"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="15 3 21 3 21 9" />
+            <polyline points="9 21 3 21 3 15" />
+            <line x1="21" y1="3" x2="14" y2="10" />
+            <line x1="3" y1="21" x2="10" y2="14" />
+          </svg>
+        </button>
+
+        <!-- Close -->
+        <button
+          (click)="toggle()"
+          (mousedown)="$event.stopPropagation()"
+          class="chat-icon-btn shrink-0"
+          title="Close"
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Messages -->
+      <div
+        #messagesEl
+        class="flex-1 overflow-y-auto p-4 space-y-3 chat-messages-area"
+      >
+        <div *ngFor="let msg of messages()">
+          <div
+            [class]="
+              msg.role === 'user'
+                ? 'flex justify-end'
+                : 'flex justify-start items-end gap-2'
+            "
+          >
+            <div
+              *ngIf="msg.role === 'assistant'"
+              class="chat-bot-dot shrink-0 mb-1"
+            ></div>
+            <ng-container *ngIf="msg.role === 'user'; else asstCompact">
+              <div class="chat-bubble-user max-w-[82%] text-sm">
+                {{ msg.content }}
+              </div>
+            </ng-container>
+            <ng-template #asstCompact>
+              <div class="chat-bubble-assistant max-w-[88%]">
+                <app-markdown-response
+                  [content]="msg.content"
+                  class="block"
+                ></app-markdown-response>
+              </div>
+            </ng-template>
+          </div>
+          <div
+            *ngIf="
+              msg.role === 'assistant' && (msg.suggestions?.length ?? 0) > 0
+            "
+            class="flex flex-wrap gap-2 mt-2 ml-4"
+          >
+            <button
+              *ngFor="let q of msg.suggestions"
+              (click)="sendSuggestion(q)"
+              [disabled]="isTyping()"
+              class="text-xs text-left px-3 py-1.5 rounded-full border border-slate-300 text-slate-700 bg-white hover:bg-indigo-50 hover:border-indigo-400 transition disabled:opacity-50"
+            >
+              {{ q }}
+            </button>
+          </div>
+        </div>
+
+        <div *ngIf="isTyping()" class="flex justify-start items-end gap-2">
+          <div class="chat-bot-dot shrink-0"></div>
+          <div class="chat-typing-indicator">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="border-t border-slate-200 p-3 flex gap-2 bg-white">
+        <input
+          type="text"
+          [placeholder]="i18n.t('chatbot.placeholder')"
+          [value]="userInput()"
+          (input)="userInput.set($any($event.target).value)"
+          (keydown)="onKeydown($event)"
+          class="chat-input flex-1 text-sm"
+        />
+        <button
+          (click)="send()"
+          [disabled]="!userInput().trim() || isTyping()"
+          class="chat-send-btn"
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <line x1="22" y1="2" x2="11" y2="13" />
+            <polygon points="22 2 15 22 11 13 2 9 22 2" />
+          </svg>
+        </button>
+      </div>
+
+      <!-- Corner resize grips -->
+      <div
+        class="chat-resize-grip chat-resize-grip--nw"
+        (mousedown)="onResizeStart($event, 'nw')"
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <line
+            x1="10"
+            y1="2"
+            x2="2"
+            y2="10"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <line
+            x1="6"
+            y1="2"
+            x2="2"
+            y2="6"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <line
+            x1="2"
+            y1="2"
+            x2="2"
+            y2="10"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+        </svg>
+      </div>
+      <div
+        class="chat-resize-grip chat-resize-grip--ne"
+        (mousedown)="onResizeStart($event, 'ne')"
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <line
+            x1="2"
+            y1="2"
+            x2="10"
+            y2="10"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <line
+            x1="6"
+            y1="2"
+            x2="10"
+            y2="6"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <line
+            x1="10"
+            y1="2"
+            x2="10"
+            y2="10"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+        </svg>
+      </div>
+      <div
+        class="chat-resize-grip chat-resize-grip--sw"
+        (mousedown)="onResizeStart($event, 'sw')"
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <line
+            x1="10"
+            y1="10"
+            x2="2"
+            y2="2"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <line
+            x1="6"
+            y1="10"
+            x2="2"
+            y2="6"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <line
+            x1="2"
+            y1="2"
+            x2="2"
+            y2="10"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+        </svg>
+      </div>
+      <div
+        class="chat-resize-grip chat-resize-grip--se"
+        (mousedown)="onResizeStart($event, 'se')"
+      >
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <line
+            x1="2"
+            y1="2"
+            x2="10"
+            y2="10"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <line
+            x1="6"
+            y1="10"
+            x2="10"
+            y2="6"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+          <line
+            x1="10"
+            y1="2"
+            x2="10"
+            y2="10"
+            stroke="#94a3b8"
+            stroke-width="1.5"
+            stroke-linecap="round"
+          />
+        </svg>
+      </div>
+    </div>
+  </ng-template>
+</div>

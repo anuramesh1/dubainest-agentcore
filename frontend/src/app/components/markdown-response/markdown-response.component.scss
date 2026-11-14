@@ -1,0 +1,219 @@
+.markdown-container {
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto Mono", sans-serif;
+  color: #1f2937;
+  line-height: 1.6;
+
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4),
+  :deep(h5),
+  :deep(h6) {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+    font-weight: 700;
+    color: #111827;
+  }
+
+  :deep(h1) {
+    font-size: 1.875rem;
+    border-bottom: 2px solid #3b82f6;
+    padding-bottom: 0.5rem;
+  }
+
+  :deep(h2) {
+    font-size: 1.5rem;
+    color: #1e40af;
+    margin-top: 1.75rem;
+  }
+
+  :deep(h3) {
+    font-size: 1.25rem;
+    color: #1e40af;
+  }
+
+  :deep(h4),
+  :deep(h5),
+  :deep(h6) {
+    font-size: 1rem;
+    color: #0f172a;
+  }
+
+  :deep(p) {
+    margin: 1rem 0;
+    line-height: 1.8;
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 1rem 0 1rem 2rem;
+    padding: 0;
+
+    li {
+      margin: 0.5rem 0;
+      line-height: 1.8;
+    }
+  }
+
+  :deep(ul) {
+    list-style-type: disc;
+  }
+
+  :deep(ol) {
+    list-style-type: decimal;
+  }
+
+  :deep(blockquote) {
+    border-left: 4px solid #3b82f6;
+    background-color: #eff6ff;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+    border-radius: 0.5rem;
+    font-style: italic;
+    color: #1e40af;
+
+    &.warning {
+      border-left-color: #ef4444;
+      background-color: #fee2e2;
+      color: #991b1b;
+    }
+
+    &.info {
+      border-left-color: #06b6d4;
+      background-color: #ecfdf5;
+      color: #047857;
+    }
+
+    p {
+      margin: 0;
+    }
+  }
+
+  :deep(table) {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1.5rem 0;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    overflow: hidden;
+
+    thead {
+      background-color: #f3f4f6;
+
+      tr {
+        border-bottom: 2px solid #d1d5db;
+      }
+
+      th {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        font-weight: 700;
+        color: #1f2937;
+        background-color: #f3f4f6;
+      }
+    }
+
+    tbody {
+      tr {
+        border-bottom: 1px solid #e5e7eb;
+
+        &:hover {
+          background-color: #f9fafb;
+        }
+
+        &:last-child {
+          border-bottom: none;
+        }
+      }
+
+      td {
+        padding: 0.75rem 1rem;
+        color: #374151;
+      }
+    }
+  }
+
+  :deep(code) {
+    background-color: #f3f4f6;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    font-family: "Courier New", monospace;
+    font-size: 0.875em;
+    color: #991b1b;
+  }
+
+  :deep(pre) {
+    background-color: #1f2937;
+    color: #f3f4f6;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin: 1rem 0;
+
+    code {
+      background-color: transparent;
+      padding: 0;
+      color: #f3f4f6;
+    }
+  }
+
+  :deep(a) {
+    color: #2563eb;
+    text-decoration: none;
+    border-bottom: 1px dotted #2563eb;
+
+    &:hover {
+      color: #1d4ed8;
+      border-bottom-style: solid;
+    }
+  }
+
+  :deep(strong) {
+    font-weight: 700;
+    color: #1f2937;
+  }
+
+  :deep(em) {
+    font-style: italic;
+  }
+
+  :deep(hr) {
+    border: none;
+    border-top: 2px solid #e5e7eb;
+    margin: 2rem 0;
+  }
+
+  // Handle emoji + text combinations
+  :deep(p) {
+    em {
+      font-style: normal;
+      color: #6366f1;
+    }
+  }
+}
+
+@media (max-width: 640px) {
+  .markdown-container {
+    :deep(h1) {
+      font-size: 1.5rem;
+    }
+
+    :deep(h2) {
+      font-size: 1.25rem;
+    }
+
+    :deep(table) {
+      font-size: 0.875rem;
+
+      thead th,
+      tbody td {
+        padding: 0.5rem 0.75rem;
+      }
+    }
+
+    :deep(blockquote) {
+      padding: 0.75rem 1rem;
+    }
+  }
+}

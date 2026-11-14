@@ -1,0 +1,23 @@
+# ─────────────────────────────────────────────────────────
+# DubaiNest AI · frontend Dockerfile (development)
+# Angular 17 dev server with hot reload on Apple Silicon.
+# ─────────────────────────────────────────────────────────
+FROM --platform=linux/arm64 node:20-alpine
+
+WORKDIR /app
+
+# Install deps first for layer caching.
+# Phase 2 will populate package.json — until then this is a no-op
+# but the Dockerfile is here so the stack boots end-to-end.
+COPY package*.json* ./
+RUN if [ -f package.json ]; then npm ci; else echo "package.json not yet — Phase 2"; fi
+
+# Install Angular CLI globally so `ng` is available
+RUN npm install -g @angular/cli@17
+
+COPY . .
+
+EXPOSE 4200
+
+# Bind to 0.0.0.0 so the port is reachable from the host
+CMD ["sh", "-c", "if [ -f package.json ]; then ng serve --host 0.0.0.0 --poll 2000; else echo 'Awaiting Phase 2 — frontend scaffold not yet generated.' && tail -f /dev/null; fi"]

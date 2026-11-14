@@ -1,0 +1,259 @@
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <!-- Header -->
+  <div class="mb-6 flex items-start justify-between gap-4">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900">
+        {{ i18n.t("listings.title") }}
+      </h1>
+      <p class="text-gray-500 mt-1">
+        {{ i18n.t("listings.subtitle") }} — {{ properties().length }} properties
+        from Dubai's top developers
+      </p>
+    </div>
+
+    <!-- AI assistant launcher — on the same line as the page title.
+         Pulsing dot draws attention until the user opens the chat. -->
+    <button
+      (click)="chat.toggleOpen()"
+      class="relative shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold text-white bg-gradient-to-r from-indigo-600 to-blue-600 shadow-sm hover:from-indigo-500 hover:to-blue-500 transition-all"
+      [attr.aria-label]="i18n.t('nav.assistant')"
+      [attr.aria-pressed]="chat.isOpen()"
+    >
+      @if (!chat.isOpen()) {
+        <span class="absolute -top-1 -right-1 flex h-3 w-3" aria-hidden="true">
+          <span
+            class="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"
+          ></span>
+          <span
+            class="relative inline-flex rounded-full h-3 w-3 bg-amber-500"
+          ></span>
+        </span>
+      }
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path
+          d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+        />
+      </svg>
+      <span class="hidden sm:inline">{{ i18n.t("nav.assistant") }}</span>
+    </button>
+  </div>
+
+  <!-- Filters -->
+  <div class="bg-white rounded-2xl border border-gray-200 p-4 mb-6 shadow-sm">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <!-- Area -->
+      <div>
+        <label class="text-xs text-gray-500 font-medium mb-1 block">{{
+          i18n.t("filter.area")
+        }}</label>
+        <select
+          [value]="filters().area"
+          (change)="updateFilter('area', $any($event.target).value)"
+          class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+        >
+          <option value="">{{ i18n.t("filter.any") }}</option>
+          @for (area of areas(); track area) {
+            <option [value]="area">{{ area }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Builder / Developer -->
+      <div>
+        <label class="text-xs text-gray-500 font-medium mb-1 block">{{
+          i18n.t("filter.builder")
+        }}</label>
+        <select
+          [value]="filters().developer"
+          (change)="updateFilter('developer', $any($event.target).value)"
+          class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+        >
+          <option value="">{{ i18n.t("filter.any") }}</option>
+          @for (dev of developers(); track dev) {
+            <option [value]="dev">{{ dev }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Type -->
+      <div>
+        <label class="text-xs text-gray-500 font-medium mb-1 block">{{
+          i18n.t("filter.type")
+        }}</label>
+        <select
+          [value]="filters().type"
+          (change)="updateFilter('type', $any($event.target).value)"
+          class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+        >
+          <option value="">{{ i18n.t("filter.any") }}</option>
+          @for (type of types(); track type) {
+            <option [value]="type">{{ i18n.t("type." + type) }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Bedrooms -->
+      <div>
+        <label class="text-xs text-gray-500 font-medium mb-1 block">{{
+          i18n.t("filter.bedrooms")
+        }}</label>
+        <select
+          [value]="filters().bedrooms ?? ''"
+          (change)="
+            updateFilter(
+              'bedrooms',
+              $any($event.target).value === ''
+                ? null
+                : +$any($event.target).value
+            )
+          "
+          class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+        >
+          <option value="">{{ i18n.t("filter.any") }}</option>
+          @for (b of bedroomOptions; track b) {
+            <option [value]="b">{{ b === 0 ? "Studio" : b + " BR" }}</option>
+          }
+        </select>
+      </div>
+
+      <!-- Min Price -->
+      <div>
+        <label class="text-xs text-gray-500 font-medium mb-1 block"
+          >{{ i18n.t("filter.minPrice") }} (AED)</label
+        >
+        <input
+          type="number"
+          [value]="filters().minPrice ?? ''"
+          (input)="
+            updateFilter(
+              'minPrice',
+              $any($event.target).value ? +$any($event.target).value : null
+            )
+          "
+          placeholder="500,000"
+          class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-400"
+        />
+      </div>
+
+      <!-- Clear -->
+      <div class="flex items-end">
+        <button
+          (click)="clearFilters()"
+          [disabled]="!hasActiveFilters()"
+          class="w-full text-sm px-3 py-2 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition-all"
+        >
+          {{ i18n.t("filter.clear") }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Property Grid -->
+  @if (properties().length === 0) {
+    <div class="text-center py-16 text-gray-400">
+      <p class="text-5xl mb-4">🏠</p>
+      <p class="text-lg font-medium">No properties match your filters</p>
+      <button
+        (click)="clearFilters()"
+        class="mt-3 text-blue-600 hover:underline text-sm"
+      >
+        Clear filters
+      </button>
+    </div>
+  } @else {
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+      @for (property of properties(); track property.id) {
+        <div
+          class="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-200"
+        >
+          <!-- Image -->
+          <div class="relative h-48 bg-gray-100 overflow-hidden">
+            <img
+              [src]="property.images[0]"
+              [alt]="i18n.lang() === 'ar' ? property.titleAr : property.title"
+              class="w-full h-full object-cover"
+            />
+            <!-- Developer badge -->
+            <span
+              class="absolute top-3 left-3 bg-white/95 backdrop-blur-sm text-xs font-bold px-2.5 py-1 rounded-full text-blue-800 shadow-sm"
+            >
+              🏢 {{ property.developer }}
+            </span>
+            @if (property.roi > 0) {
+              <span
+                class="absolute top-3 right-3 bg-emerald-500 text-white text-xs font-bold px-2 py-1 rounded-full"
+              >
+                {{ property.roi }}% {{ i18n.t("property.roi") }}
+              </span>
+            } @else {
+              <span
+                class="absolute top-3 right-3 bg-gray-500 text-white text-xs font-bold px-2 py-1 rounded-full"
+              >
+                Off-Plan 2029
+              </span>
+            }
+            <!-- Property type pill at bottom -->
+            <span
+              class="absolute bottom-3 left-3 bg-black/50 text-white text-xs font-medium px-2 py-0.5 rounded-full capitalize"
+            >
+              {{ i18n.t("type." + property.type) }}
+            </span>
+          </div>
+
+          <!-- Content -->
+          <div class="p-4">
+            <h3
+              class="font-semibold text-gray-900 text-sm leading-snug mb-1 line-clamp-2"
+            >
+              {{ i18n.lang() === "ar" ? property.titleAr : property.title }}
+            </h3>
+            <p class="text-xs text-gray-500 mb-3">
+              📍 {{ i18n.lang() === "ar" ? property.areaAr : property.area }}
+            </p>
+
+            <!-- Specs -->
+            <div class="flex gap-3 text-xs text-gray-500 mb-4">
+              @if (property.bedrooms > 0) {
+                <span
+                  >🛏 {{ property.bedrooms }} {{ i18n.t("property.bed") }}</span
+                >
+              } @else {
+                <span>🛏 Studio</span>
+              }
+              <span
+                >🚿 {{ property.bathrooms }} {{ i18n.t("property.bath") }}</span
+              >
+              <span
+                >📐 {{ property.sizeSqft.toLocaleString() }}
+                {{ i18n.t("property.sqft") }}</span
+              >
+            </div>
+
+            <!-- Price + CTA -->
+            <div class="flex items-center justify-between">
+              <p class="font-bold text-blue-700 text-base">
+                {{ formatPrice(property.price) }}
+              </p>
+              <a
+                [routerLink]="['/property', property.id]"
+                class="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                {{ i18n.t("property.viewDetails") }}
+              </a>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

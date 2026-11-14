@@ -1,0 +1,306 @@
+// ─── Floating Action Button ───────────────────────────────────────────────
+
+.chat-fab {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #0f172a 0%, #1e3a5f 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 8px 28px rgba(15, 23, 42, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+
+  &:hover {
+    transform: scale(1.07);
+    box-shadow:
+      0 12px 36px rgba(15, 23, 42, 0.5),
+      0 4px 10px rgba(0, 0, 0, 0.2);
+  }
+
+  &--open {
+    background: linear-gradient(145deg, #1e293b 0%, #334155 100%);
+  }
+}
+
+// ─── Panel ───────────────────────────────────────────────────────────────────
+
+.chat-panel {
+  border-radius: 20px;
+  background: white;
+  box-shadow:
+    0 24px 64px rgba(15, 23, 42, 0.18),
+    0 8px 24px rgba(15, 23, 42, 0.1),
+    0 0 0 1px rgba(15, 23, 42, 0.06);
+  min-width: 320px;
+  min-height: 320px;
+  transition: box-shadow 0.2s ease;
+
+  &.is-dragging {
+    box-shadow:
+      0 32px 80px rgba(15, 23, 42, 0.28),
+      0 0 0 2px rgba(59, 130, 246, 0.35);
+
+    .chat-header {
+      cursor: grabbing;
+    }
+  }
+}
+
+// ─── Header ──────────────────────────────────────────────────────────────────
+
+.chat-header {
+  background: linear-gradient(135deg, #0f172a 0%, #1a2744 100%);
+  border-radius: 20px 20px 0 0;
+  position: relative;
+  overflow: hidden;
+
+  // Subtle gold shimmer line across the top
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 16px;
+    right: 16px;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(212, 168, 83, 0.55) 40%,
+      rgba(212, 168, 83, 0.55) 60%,
+      transparent 100%
+    );
+  }
+
+  &--full {
+    border-radius: 0;
+  }
+}
+
+// ─── Avatar ──────────────────────────────────────────────────────────────────
+
+.chat-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.35);
+}
+
+// ─── Header icon buttons ─────────────────────────────────────────────────────
+
+.chat-icon-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
+
+  &:hover {
+    color: #e2e8f0;
+    background: rgba(255, 255, 255, 0.1);
+  }
+}
+
+// ─── Messages area ───────────────────────────────────────────────────────────
+
+.chat-messages-area {
+  background: #f8fafc;
+}
+
+// ─── Bot indicator dot ───────────────────────────────────────────────────────
+
+.chat-bot-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(79, 70, 229, 0.4);
+}
+
+// ─── Message bubbles ─────────────────────────────────────────────────────────
+
+.chat-bubble-user {
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  color: white;
+  border-radius: 18px 18px 4px 18px;
+  padding: 10px 15px;
+  word-break: break-word;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.28);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+// Shared by the assistant bubble and the typing indicator
+.chat-bubble-assistant,
+.chat-typing-indicator {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px 18px 18px 18px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.chat-bubble-assistant {
+  color: #1e293b;
+  padding: 10px 14px;
+  word-break: break-word;
+  font-size: 0.875rem;
+  line-height: 1.55;
+}
+
+// ─── Typing indicator ────────────────────────────────────────────────────────
+
+.chat-typing-indicator {
+  padding: 11px 16px;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+
+  span {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #94a3b8;
+    display: inline-block;
+    animation: chat-bounce 1.3s infinite ease-in-out;
+
+    &:nth-child(2) {
+      animation-delay: 0.18s;
+    }
+    &:nth-child(3) {
+      animation-delay: 0.36s;
+    }
+  }
+}
+
+@keyframes chat-bounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+// ─── Input field ─────────────────────────────────────────────────────────────
+
+.chat-input {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 9px 16px;
+  background: #f8fafc;
+  color: #1e293b;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+  outline: none;
+
+  &::placeholder {
+    color: #94a3b8;
+  }
+
+  &:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    background: white;
+  }
+}
+
+// ─── Send button ─────────────────────────────────────────────────────────────
+
+.chat-send-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease,
+    opacity 0.15s;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.32);
+
+  &:hover:not(:disabled) {
+    transform: scale(1.06);
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.42);
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+}
+
+// ─── Corner resize grips ──────────────────────────────────────────────────────
+
+.chat-resize-grip {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 20;
+
+  // Show grips when hovering the panel
+  .chat-panel:hover & {
+    opacity: 0.6;
+  }
+
+  &:hover {
+    opacity: 1 !important;
+  }
+
+  &--nw {
+    top: 2px;
+    left: 2px;
+    cursor: nw-resize;
+  }
+  &--ne {
+    top: 2px;
+    right: 2px;
+    cursor: ne-resize;
+  }
+  &--sw {
+    bottom: 2px;
+    left: 2px;
+    cursor: sw-resize;
+  }
+  &--se {
+    bottom: 2px;
+    right: 2px;
+    cursor: se-resize;
+  }
+}
+
+// ─── Drag dots (visual affordance, non-interactive) ───────────────────────────
+
+.chat-drag-dots {
+  opacity: 0.55;
+}

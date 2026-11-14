@@ -1,0 +1,37 @@
+<nav class="bg-white border-b border-gray-200 sticky top-0 z-40 shadow-sm">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="flex justify-between items-center h-16">
+      <a routerLink="/" class="flex items-center gap-2">
+        <span class="text-2xl">🏙️</span>
+        <span class="text-xl font-bold text-blue-700">{{
+          i18n.t("nav.title")
+        }}</span>
+      </a>
+
+      <div class="flex items-center gap-6">
+        <a
+          routerLink="/"
+          routerLinkActive="text-blue-600 font-semibold"
+          [routerLinkActiveOptions]="{ exact: true }"
+          class="text-gray-600 hover:text-blue-600 transition-colors text-sm font-medium"
+        >
+          {{ i18n.t("nav.listings") }}
+        </a>
+        <a
+          routerLink="/map"
+          routerLinkActive="text-blue-600 font-semibold"
+          class="text-gray-600 hover:text-blue-600 transition-colors text-sm font-medium"
+        >
+          {{ i18n.t("nav.map") }}
+        </a>
+
+        <button
+          (click)="toggleLang()"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-gray-300 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-blue-400 transition-all"
+        >
+          <span>{{ i18n.lang() === "en" ? "🇦🇪 عربي" : "🇬🇧 English" }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</nav>

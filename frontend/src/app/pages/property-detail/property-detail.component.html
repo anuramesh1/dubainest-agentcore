@@ -1,0 +1,278 @@
+@if (property(); as p) {
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <!-- Back -->
+    <a
+      routerLink="/"
+      class="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline mb-6"
+    >
+      ← {{ i18n.lang() === "ar" ? "رجوع" : "Back to listings" }}
+    </a>
+
+    <!-- Hero Image -->
+    <div class="rounded-2xl overflow-hidden h-72 sm:h-96 bg-gray-100 mb-6">
+      <img
+        [src]="p.images[0]"
+        [alt]="i18n.lang() === 'ar' ? p.titleAr : p.title"
+        class="w-full h-full object-cover"
+      />
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Main content -->
+      <div class="lg:col-span-2 space-y-6">
+        <!-- Title & Location -->
+        <div>
+          <div class="flex flex-wrap gap-2 mb-2">
+            <span
+              class="bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-1 rounded-full capitalize"
+            >
+              {{ i18n.t("type." + p.type) }}
+            </span>
+            @if (p.roi > 0) {
+              <span
+                class="bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-1 rounded-full"
+              >
+                {{ p.roi }}% {{ i18n.t("property.roi") }}
+              </span>
+            } @else {
+              <span
+                class="bg-gray-100 text-gray-600 text-xs font-semibold px-2 py-1 rounded-full"
+              >
+                Off-Plan · {{ p.completionYear }}
+              </span>
+            }
+          </div>
+          <h1 class="text-2xl font-bold text-gray-900">
+            {{ i18n.lang() === "ar" ? p.titleAr : p.title }}
+          </h1>
+          <p class="text-gray-500 mt-1">
+            📍 {{ i18n.lang() === "ar" ? p.areaAr : p.area }}
+          </p>
+        </div>
+
+        <!-- Specs row -->
+        <div class="grid grid-cols-3 gap-4">
+          <div class="bg-gray-50 rounded-xl p-3 text-center">
+            <p class="text-2xl">🛏</p>
+            <p class="font-semibold text-gray-800">
+              {{ p.bedrooms === 0 ? "Studio" : p.bedrooms }}
+            </p>
+            <p class="text-xs text-gray-500">{{ i18n.t("property.bed") }}</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-3 text-center">
+            <p class="text-2xl">🚿</p>
+            <p class="font-semibold text-gray-800">{{ p.bathrooms }}</p>
+            <p class="text-xs text-gray-500">{{ i18n.t("property.bath") }}</p>
+          </div>
+          <div class="bg-gray-50 rounded-xl p-3 text-center">
+            <p class="text-2xl">📐</p>
+            <p class="font-semibold text-gray-800">
+              {{ p.sizeSqft.toLocaleString() }}
+            </p>
+            <p class="text-xs text-gray-500">{{ i18n.t("property.sqft") }}</p>
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div>
+          <h2 class="font-semibold text-gray-900 mb-2">
+            {{ i18n.t("detail.overview") }}
+          </h2>
+          <p class="text-gray-600 text-sm leading-relaxed">
+            {{ i18n.lang() === "ar" ? p.descriptionAr : p.description }}
+          </p>
+        </div>
+
+        <!-- Amenities -->
+        <div>
+          <h2 class="font-semibold text-gray-900 mb-3">
+            {{ i18n.t("detail.amenities") }}
+          </h2>
+          <div class="flex flex-wrap gap-2">
+            @for (amenity of p.amenities; track amenity) {
+              <span
+                class="bg-blue-50 text-blue-700 text-xs px-3 py-1.5 rounded-full border border-blue-100"
+              >
+                {{ amenity }}
+              </span>
+            }
+          </div>
+        </div>
+
+        <!-- Map -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-semibold text-gray-900">📍 Location</h2>
+            <button
+              (click)="openMap(p.lat, p.lng)"
+              class="text-xs text-blue-600 hover:underline flex items-center gap-1"
+            >
+              Open in Google Maps ↗
+            </button>
+          </div>
+          <div class="rounded-2xl overflow-hidden border border-gray-200 h-64">
+            <iframe
+              [src]="getMapEmbedUrl(p.lat, p.lng) | trustUrl"
+              width="100%"
+              height="100%"
+              style="border: 0"
+              loading="lazy"
+            >
+            </iframe>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="space-y-4">
+        <!-- Price card -->
+        <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+          <p class="text-3xl font-bold text-blue-700 mb-1">
+            {{ formatPrice(p.price) }}
+          </p>
+          <p class="text-sm text-gray-500 mb-4">
+            {{ p.developer }} · {{ p.completionYear }}
+          </p>
+
+          <button
+            (click)="openEnquiry()"
+            class="w-full bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 transition-colors mb-2"
+          >
+            {{ i18n.t("property.enquire") }}
+          </button>
+          <button
+            (click)="askAI()"
+            class="w-full border border-gray-300 text-gray-700 font-medium py-3 rounded-xl hover:bg-gray-50 transition-colors text-sm"
+          >
+            🤖 Ask AI about this property
+          </button>
+        </div>
+
+        <!-- ROI card -->
+        <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-5">
+          <h3 class="font-semibold text-emerald-800 mb-3">
+            {{ i18n.t("detail.roi") }}
+          </h3>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-gray-600">Gross ROI</span>
+              <span class="font-bold text-emerald-700">
+                {{ p.roi > 0 ? p.roi + "%" : "TBD (off-plan)" }}
+              </span>
+            </div>
+            @if (p.roi > 0) {
+              <div class="flex justify-between">
+                <span class="text-gray-600">Est. Annual Rent</span>
+                <span class="font-semibold text-gray-800">{{
+                  estimatedAnnualRent(p.price, p.roi)
+                }}</span>
+              </div>
+            }
+            <div class="flex justify-between">
+              <span class="text-gray-600">{{
+                i18n.t("detail.developer")
+              }}</span>
+              <span class="font-semibold text-gray-800">{{ p.developer }}</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-gray-600">{{
+                i18n.t("detail.completion")
+              }}</span>
+              <span class="font-semibold text-gray-800">{{
+                p.completionYear
+              }}</span>
+            </div>
+          </div>
+          <p class="text-xs text-emerald-600 mt-3">
+            {{ i18n.t("detail.roiNote") }}
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Enquiry Modal -->
+  @if (showEnquiry()) {
+    <div
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      (click)="closeEnquiry()"
+    >
+      <div
+        class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6"
+        (click)="$event.stopPropagation()"
+      >
+        @if (enquirySent()) {
+          <div class="text-center py-6">
+            <p class="text-4xl mb-3">✅</p>
+            <p class="text-lg font-semibold text-gray-900">Enquiry Sent!</p>
+            <p class="text-sm text-gray-500 mt-1">We'll be in touch shortly.</p>
+          </div>
+        } @else {
+          <div class="flex items-center justify-between mb-5">
+            <h2 class="text-lg font-bold text-gray-900">
+              Enquire About This Property
+            </h2>
+            <button
+              (click)="closeEnquiry()"
+              class="text-gray-400 hover:text-gray-600 text-xl"
+            >
+              ✕
+            </button>
+          </div>
+
+          <p class="text-sm text-gray-500 mb-4">{{ p.title }}</p>
+
+          <div class="space-y-3">
+            <input
+              type="text"
+              placeholder="Your Name"
+              [value]="enquiryForm().name"
+              (input)="updateField('name', $any($event.target).value)"
+              class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400"
+            />
+            <input
+              type="email"
+              placeholder="Email Address"
+              [value]="enquiryForm().email"
+              (input)="updateField('email', $any($event.target).value)"
+              class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400"
+            />
+            <input
+              type="tel"
+              placeholder="Phone Number"
+              [value]="enquiryForm().phone"
+              (input)="updateField('phone', $any($event.target).value)"
+              class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400"
+            />
+            <textarea
+              placeholder="Message (optional)"
+              rows="3"
+              [value]="enquiryForm().message"
+              (input)="updateField('message', $any($event.target).value)"
+              class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-blue-400 resize-none"
+            >
+            </textarea>
+          </div>
+
+          <button
+            (click)="submitEnquiry()"
+            [disabled]="!enquiryForm().name || !enquiryForm().email"
+            class="w-full mt-4 bg-blue-600 text-white font-semibold py-3 rounded-xl hover:bg-blue-700 disabled:opacity-40 transition-colors"
+          >
+            Send Enquiry
+          </button>
+        }
+      </div>
+    </div>
+  }
+} @else {
+  <div class="text-center py-24 text-gray-400">
+    <p class="text-5xl mb-4">🏠</p>
+    <p class="text-lg">Property not found</p>
+    <a
+      routerLink="/"
+      class="mt-3 inline-block text-blue-600 hover:underline text-sm"
+      >← Back to listings</a
+    >
+  </div>
+}

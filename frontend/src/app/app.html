@@ -1,0 +1,7 @@
+<div class="min-h-screen flex flex-col" [dir]="dir()">
+  <app-navbar (langChange)="onLangChange($event)" />
+  <main class="flex-1">
+    <router-outlet />
+  </main>
+  <app-chatbot />
+</div>

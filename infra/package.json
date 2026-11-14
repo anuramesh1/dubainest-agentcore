@@ -1,0 +1,27 @@
+{
+  "name": "dubainest-agentcore-infra",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "synth": "npx cdk synth",
+    "diff": "npx cdk diff",
+    "deploy": "npx cdk deploy --all",
+    "deploy:frontend": "npx cdk deploy DubaiNestAgentCoreFrontendStack",
+    "deploy:obs": "npx cdk deploy DubaiNestAgentCoreObservabilityStack",
+    "destroy": "npx cdk destroy --all",
+    "bootstrap": "npx cdk bootstrap",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "aws-cdk": "2.1126.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.257.0",
+    "constructs": "^10.5.0"
+  }
+}
