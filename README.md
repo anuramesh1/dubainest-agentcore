@@ -10,8 +10,8 @@ The design is in [`docs/00-spec.md`](docs/00-spec.md). This repo is built step b
 | --- | --- | --- |
 | 1 | Copy of `dubainest-ai`, `git init`, VPC / ALB / ECS removed | ✅ done |
 | 2 | `api/`: properties, facets, enquiries, property-intro | ✅ done |
-| 3 | `agent/` LangGraph graph, run in-process | next |
-| 4 | Chat relay (local) + `scripts/build_index.py` | |
+| 3 | `agent/` LangGraph graph, run in-process | ✅ done |
+| 4 | Chat relay (local) + `scripts/build_index.py` | next |
 | 5 | CDK: api Lambda + Function URL behind CloudFront | |
 | 6 | AgentCore Runtime | |
 | 7 | Relay wired to AgentCore, caps, budget | |
@@ -23,13 +23,15 @@ The design is in [`docs/00-spec.md`](docs/00-spec.md). This repo is built step b
 dubainest-agentcore/
 ├── frontend/   # Angular 17 + Tailwind, copied from dubainest-ai (build warnings fixed)
 ├── api/        # FastAPI: properties, facets, detail, enquiries, property-intro (+ tests)
-├── data/       # mock_properties.py: the 20-listing seed (DAMAC 7, Emaar 8, Nakheel 5)
+├── agent/      # LangGraph StateGraph: router → specialist(s) → writer (+ tests)
+├── evals/      # Bedrock evals: routing, grounding, cost (spec §10)
+├── data/       # mock_properties.py (20 listings: DAMAC 7, Emaar 8, Nakheel 5), area_stats.json
 ├── infra/      # CDK (TypeScript): FrontendStack, ObservabilityStack
 ├── scripts/    # seed_properties.py, upload_photos.sh
 └── docs/       # 00-spec.md, architecture.png; legacy/ holds the dubainest-ai docs
 ```
 
-`agent/` and `evals/` arrive in steps 3–4 (spec §9). `api/Dockerfile` comes with the Lambda in step 5.
+`api/Dockerfile` comes with the Lambda in step 5; `agent/main.py` and `agent/Dockerfile` with AgentCore in step 6.
 
 ## What step 1 removed, and why
 
@@ -73,11 +75,41 @@ cd frontend && npm ci && npm start
 | `GET /api/chat/property-intro/{id}` | templated from the listing, no model call |
 | `POST /api/chat` | step 4 |
 
+## The agent (step 3)
+
+```
+START → router ─┬→ property_search ─┐
+   (Nova Micro) ├→ market_intel ────┤
+                ├→ roi ─────────────┼→ writer → END
+                ├→ scheduler ───────┤  (Claude Haiku 4.5, streams)
+                ├→ general ─────────┘
+                └→ off_topic → END     (fixed reply, no model call)
+```
+
+- **router** ([agent/nodes/router.py](agent/nodes/router.py)): one Nova Micro call with structured output (`intent`, `second_intent`, `confidence`). Below 0.6 confidence, or if the call fails, the keyword router from dubainest-ai decides. A "yes" right after a viewing confirmation goes straight to the scheduler with no model call. Two intents fan out in parallel only for search + ROI, search + market or market + ROI.
+- **specialists** ([agent/nodes/specialists.py](agent/nodes/specialists.py)): plain Python, no model calls. Search parses filters from the question (area, developer, type, bedrooms, price) and widens them, saying so, when nothing matches. ROI computes yield, service charges, mortgage, cash flow and payback from the listing and stated assumptions (75% LTV, 4.5% over 25 years, AED 18/sqft service charge, 4% DLD fee). The scheduler collects property, time, name and contact across turns and writes to Leads only after the user replies yes to the confirmation.
+- **writer** ([agent/nodes/writer.py](agent/nodes/writer.py)): one Claude Haiku 4.5 call that sees only `facts`, streams the answer, and ends with suggestions that become the UI's `suggestions` event. A post-check flags any AED figure not in `facts` ([agent/grounding.py](agent/grounding.py)).
+- **events** ([agent/stream.py](agent/stream.py)): `status` → `chunk`… → `suggestions` → `done`, or `error` with a safe message, the exact shapes `chat.service.ts` parses.
+
+Market figures in [data/area_stats.json](data/area_stats.json) are the notes carried over from dubainest-ai (June 2026) and are marked unverified; the writer quotes their date. Refreshing them from DLD open data is still to do.
+
+```bash
+# ask a question in-process (Bedrock calls; listings from DynamoDB, or LISTINGS_SOURCE=seed)
+.venv/bin/python -m agent.cli "2 bed apartments under 3M"
+.venv/bin/python -m agent.cli --property 10 --trace "What's the expected ROI?"
+
+# evals against Bedrock (about 80 model calls, a few cents; leads are not written)
+.venv/bin/python -m evals            # routing ≥ 90%, grounding 20/20, ≤ 2 model calls on 95%
+.venv/bin/python -m evals grounding -v
+```
+
+Last run (3 consecutive): routing 40/40, grounding 20/20, every question in 2 model calls or fewer, about 2,900 input / 270 output tokens and **$0.0033 per question**, 2.5 s average.
+
 ## Tests and checks
 
 ```bash
-.venv/bin/pytest -q                         # api against a fake DynamoDB (moto), no AWS
-.venv/bin/ruff check api scripts data
+.venv/bin/pytest -q                         # api (fake DynamoDB) + agent (fake models), no AWS
+.venv/bin/ruff check api agent evals scripts data
 cd frontend && npm run build
 cd infra && npx cdk synth
 ```

@@ -1,0 +1,28 @@
+{
+  "as_of": "2026-06",
+  "source": "DubaiNest market notes carried over from dubainest-ai (hand-written in June 2026, not yet checked against Dubai Land Department open data)",
+  "verified": false,
+  "overview": {
+    "appreciation_2025_pct": [3, 5],
+    "waterfront_branded_appreciation_pct": [6, 8],
+    "off_plan_share_of_transactions_pct": 58,
+    "prime_gross_yield_pct": [4, 6],
+    "net_yield_gap_pct": [0.5, 1.0],
+    "golden_visa_min_purchase_aed": 2000000,
+    "off_plan_discount_to_completed_pct": [15, 30],
+    "escrow_note": "Dubai Land Department escrow rules hold buyer payments until construction milestones",
+    "service_charge_aed_per_sqft": [12, 25],
+    "mortgage_ltv_pct": {"resident": 75, "non_resident": 65},
+    "resale_time_months": [2, 4]
+  },
+  "areas": {
+    "Downtown Dubai": {"gross_yield_pct": [4.5, 5.5], "profile": "Flagship location; deepest resale market; appreciation play."},
+    "Business Bay": {"gross_yield_pct": [6.5, 7.5], "profile": "Dense commercial district with strong rental demand; yield play."},
+    "Palm Jumeirah": {"gross_yield_pct": [5.0, 6.5], "profile": "Premium waterfront; seasonal luxury rentals; appreciation play."},
+    "MBR City": {"gross_yield_pct": [6.5, 7.5], "profile": "Crystal lagoons, family-oriented, newer stock; yield play."},
+    "Dubai Hills Estate": {"gross_yield_pct": [5.0, 6.0], "profile": "Golf community with a villa and apartment mix."},
+    "Dubai Creek Harbour": {"gross_yield_pct": [4.5, 5.5], "profile": "Emerging district; upside tied to Creek Tower."},
+    "Dubai Maritime City": {"gross_yield_pct": [5.5, 6.5], "profile": "Off-plan waterfront peninsula; yields estimated by comparison with Palm Jumeirah."},
+    "Dubailand": {"gross_yield_pct": null, "profile": "Master-planned suburban communities (including DAMAC Islands); no yield benchmark in these notes."}
+  }
+}

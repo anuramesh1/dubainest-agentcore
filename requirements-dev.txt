@@ -1,5 +1,6 @@
 # Local dev and tests: python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 -r api/requirements.txt
+-r agent/requirements.txt
 python-dotenv==1.1.0   # lets uvicorn read --env-file .env
 pytest==8.3.5
 httpx==0.28.1          # FastAPI TestClient
