@@ -1,0 +1,5 @@
+# api Lambda runtime (boto3 also ships with the Lambda Python runtime)
+fastapi==0.115.12
+uvicorn==0.34.2
+pydantic==2.11.4
+boto3==1.38.13

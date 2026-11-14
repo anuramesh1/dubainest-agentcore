@@ -19,10 +19,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install
+        run: pip install -r requirements-dev.txt
       - name: Ruff (lint)
-        run: |
-          pip install ruff==0.17.5
-          ruff check scripts data $(ls -d api agent evals 2>/dev/null)
+        run: ruff check scripts data $(ls -d api agent evals 2>/dev/null)
+      - name: Tests (fake DynamoDB, no AWS)
+        run: pytest -q
       - name: Seed catalogue loads
         run: python -c "import sys; sys.path.insert(0, 'data'); from mock_properties import PROPERTIES; assert len(PROPERTIES) == 20"
 
