@@ -16,15 +16,18 @@ from agent.nodes.router import keyword_route
 from agent.nodes.specialists import roi_numbers
 from agent.prompts import CONFIRM_PHRASE, OFF_TOPIC_REPLY, SUGGESTIONS_MARKER
 from agent.stream import SAFE_ERROR, stream_events
-from agent.tools import leads, listings
+from agent.tools import leads, listings, vector_index
 
 
 @pytest.fixture(autouse=True)
-def seed_listings(monkeypatch):
+def seed_listings(monkeypatch, tmp_path):
     monkeypatch.setenv("LISTINGS_SOURCE", "seed")
+    monkeypatch.setenv("INDEX_URI", str(tmp_path / "no-index.npz"))  # no Titan calls in tests
     listings.all_listings.cache_clear()
+    vector_index.load.cache_clear()
     yield
     listings.all_listings.cache_clear()
+    vector_index.load.cache_clear()
 
 
 @pytest.fixture()
@@ -302,3 +305,16 @@ def test_grounding_sees_the_open_listing():
     _, final = run(g, "Book a viewing", property_id="1")
     writer_trace = next(t for t in final["trace"] if t["node"] == "writer")
     assert writer_trace["ungrounded"] == []
+
+
+def test_hybrid_rank_uses_vectors_and_keywords():
+    semantic = {"10": 0.17, "4": 0.12, "18": 0.20}  # 10 DAMAC Islands has lagoons and a beach
+    ranked = listings.hybrid_rank("beach and lagoon lifestyle", semantic)
+    assert ranked[0]["id"] == "10"
+    r = listings.search({}, "beach and lagoon lifestyle", semantic=semantic)
+    assert r["ranked_by"] == "hybrid" and r["listings"][0]["id"] == "10"
+
+
+def test_search_without_index_falls_back_to_keywords():
+    r = listings.search({}, "golf course living")
+    assert r["ranked_by"] == "keyword" and "Golf" in r["listings"][0]["title"]

@@ -226,8 +226,17 @@ FILTER_KEYS = (
 )
 
 
-def search(filters: dict[str, Any], text: str = "", limit: int = 5) -> dict[str, Any]:
-    """Apply filters; if nothing matches, relax price then bedrooms and say so."""
+def search(
+    filters: dict[str, Any],
+    text: str = "",
+    limit: int = 5,
+    semantic: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    """Apply filters; if nothing matches, relax price then bedrooms and say so.
+
+    With no filters at all, rank by hybrid score instead: `semantic` (vector
+    similarity per listing id, from vector_index.rank) plus keyword overlap.
+    """
 
     def match(p: dict[str, Any], f: dict[str, Any]) -> bool:
         s = summary(p)
@@ -254,14 +263,18 @@ def search(filters: dict[str, Any], text: str = "", limit: int = 5) -> dict[str,
             relaxed.extend(key)
             rows = [p for p in all_listings() if match(p, active)]
 
+    ranking = "price"
     if not any(k in filters for k in FILTER_KEYS):
-        rows = _keyword_rank(text) or rows
+        ranked = hybrid_rank(text, semantic)
+        if ranked:
+            rows, ranking = ranked, "hybrid" if semantic else "keyword"
 
     if filters.get("sort") == "yield":
-        rows = sorted(rows, key=lambda p: -p["roi"])
+        rows, ranking = sorted(rows, key=lambda p: -p["roi"]), "yield"
     return {
         "filters": {k: v for k, v in filters.items() if k != "sort"},
         "relaxed": relaxed,
+        "ranked_by": ranking,
         "total_matches": len(rows),
         "listings": [summary(p) for p in rows[:limit]],
     }
@@ -269,21 +282,32 @@ def search(filters: dict[str, Any], text: str = "", limit: int = 5) -> dict[str,
 
 _STOP = set(
     "a an the in of for to and or with me my i is are what which show find any some "
+    "something anything looking look want would like need near have has get can you "
     "dubai property properties listing listings home homes buy".split()
 )
+KEYWORD_WEIGHT = 0.3  # tuned on a handful of descriptive queries (step 4)
+MIN_HYBRID_SCORE = 0.2
 
 
-def _keyword_rank(text: str) -> list[dict[str, Any]]:
-    """Fallback when the prompt has no filters: word overlap with title/description/amenities.
-    Step 4 adds the Titan vector index in front of this."""
+def keyword_scores(text: str) -> dict[str, float]:
+    """Share of the question's content words found in each listing's text."""
     words = {w for w in re.findall(r"[a-z]+", text.lower()) if w not in _STOP and len(w) > 2}
     if not words:
-        return []
-    scored = []
+        return {}
+    out = {}
     for p in all_listings():
         hay = " ".join([p["title"], p["description"], " ".join(p["amenities"])]).lower()
-        score = sum(1 for w in words if re.search(rf"\b{w}s?\b", hay))
-        if score:
-            scored.append((score, p))
-    scored.sort(key=lambda t: (-t[0], t[1]["price"]))
-    return [p for _, p in scored]
+        hits = sum(1 for w in words if re.search(rf"\b{w}s?\b", hay))
+        if hits:
+            out[p["id"]] = hits / len(words)
+    return out
+
+
+def hybrid_rank(text: str, semantic: dict[str, float] | None = None) -> list[dict[str, Any]]:
+    """Vector similarity + KEYWORD_WEIGHT × keyword overlap. Keyword-only without an index."""
+    kw = keyword_scores(text)
+    if not semantic:
+        return [get(i) for i, _ in sorted(kw.items(), key=lambda t: -t[1])]  # type: ignore[misc]
+    scores = {i: semantic.get(i, 0.0) + KEYWORD_WEIGHT * kw.get(i, 0.0) for i in semantic}
+    best = sorted(scores.items(), key=lambda t: -t[1])
+    return [get(i) for i, sc in best if sc >= MIN_HYBRID_SCORE and get(i)]  # type: ignore[misc]

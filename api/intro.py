@@ -1,7 +1,7 @@
 """GET /api/chat/property-intro/{id}: the chat's opening card for a listing.
 
 Templated from the listing's own fields, with no model call (spec §2), ported
-from dubainest-ai AgentService.property_intro. POST /api/chat arrives in step 4.
+from dubainest-ai AgentService.property_intro. POST /api/chat is in chat_relay.py.
 """
 
 from __future__ import annotations

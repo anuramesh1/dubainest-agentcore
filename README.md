@@ -11,8 +11,8 @@ The design is in [`docs/00-spec.md`](docs/00-spec.md). This repo is built step b
 | 1 | Copy of `dubainest-ai`, `git init`, VPC / ALB / ECS removed | ✅ done |
 | 2 | `api/`: properties, facets, enquiries, property-intro | ✅ done |
 | 3 | `agent/` LangGraph graph, run in-process | ✅ done |
-| 4 | Chat relay (local) + `scripts/build_index.py` | next |
-| 5 | CDK: api Lambda + Function URL behind CloudFront | |
+| 4 | Chat relay (local) + `scripts/build_index.py` | ✅ done |
+| 5 | CDK: api Lambda + Function URL behind CloudFront | next |
 | 6 | AgentCore Runtime | |
 | 7 | Relay wired to AgentCore, caps, budget | |
 | 8 | Destroy the old backend stacks, 7-day cost check | |
@@ -22,7 +22,7 @@ The design is in [`docs/00-spec.md`](docs/00-spec.md). This repo is built step b
 ```
 dubainest-agentcore/
 ├── frontend/   # Angular 17 + Tailwind, copied from dubainest-ai (build warnings fixed)
-├── api/        # FastAPI: properties, facets, detail, enquiries, property-intro (+ tests)
+├── api/        # FastAPI: listings, enquiries, property-intro, chat relay (+ tests)
 ├── agent/      # LangGraph StateGraph: router → specialist(s) → writer (+ tests)
 ├── evals/      # Bedrock evals: routing, grounding, cost (spec §10)
 ├── data/       # mock_properties.py (20 listings: DAMAC 7, Emaar 8, Nakheel 5), area_stats.json
@@ -58,6 +58,7 @@ Needs AWS credentials that can read the shared DynamoDB tables (and write `dubai
 # once
 python3.12 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 cp .env.example .env                        # then set MEDIA_BASE_URL
+.venv/bin/python scripts/build_index.py     # vector index for search (20 Titan calls; rerun when listings change)
 
 # api on :8000 (what environment.ts points at)
 .venv/bin/uvicorn api.app:app --port 8000 --env-file .env --reload
@@ -66,6 +67,8 @@ cp .env.example .env                        # then set MEDIA_BASE_URL
 cd frontend && npm ci && npm start
 ```
 
+Open http://localhost:4200 and use the chat: it calls `POST /api/chat`, which runs the agent in the api process (`AGENT_MODE=local`) with your AWS credentials for Bedrock.
+
 | Route | Source |
 | --- | --- |
 | `GET /api/properties` (+ area, developer, type, bedrooms, minPrice, maxPrice) | Properties table, one Scan per instance per 60 s |
@@ -73,7 +76,7 @@ cd frontend && npm ci && npm start
 | `GET /api/properties/{id}` | same cache, 404 if unknown |
 | `POST /api/enquiries` | Leads table (`source: enquiry_form`), 201 |
 | `GET /api/chat/property-intro/{id}` | templated from the listing, no model call |
-| `POST /api/chat` | step 4 |
+| `POST /api/chat` (prompt, property_id, history) | guard_in (injection screen, 2,000-char cap), then the agent's SSE events, relayed unchanged |
 
 ## The agent (step 3)
 
@@ -89,6 +92,7 @@ START → router ─┬→ property_search ─┐
 - **router** ([agent/nodes/router.py](agent/nodes/router.py)): one Nova Micro call with structured output (`intent`, `second_intent`, `confidence`). Below 0.6 confidence, or if the call fails, the keyword router from dubainest-ai decides. A "yes" right after a viewing confirmation goes straight to the scheduler with no model call. Two intents fan out in parallel only for search + ROI, search + market or market + ROI.
 - **specialists** ([agent/nodes/specialists.py](agent/nodes/specialists.py)): plain Python, no model calls. Search parses filters from the question (area, developer, type, bedrooms, price) and widens them, saying so, when nothing matches. ROI computes yield, service charges, mortgage, cash flow and payback from the listing and stated assumptions (75% LTV, 4.5% over 25 years, AED 18/sqft service charge, 4% DLD fee). The scheduler collects property, time, name and contact across turns and writes to Leads only after the user replies yes to the confirmation.
 - **writer** ([agent/nodes/writer.py](agent/nodes/writer.py)): one Claude Haiku 4.5 call that sees only `facts`, streams the answer, and ends with suggestions that become the UI's `suggestions` event. A post-check flags any AED figure not in `facts` ([agent/grounding.py](agent/grounding.py)).
+- **search ranking**: with filters (area, price, bedrooms…) results are filtered and sorted by price. A descriptive question with no filters ("beach and lagoons for my family") is ranked by hybrid score: Titan v2 vector similarity from `data/listings_index.npz` plus 0.3 × keyword overlap. Without the index it falls back to keywords only. Built by [scripts/build_index.py](scripts/build_index.py); one query embedding per such question.
 - **events** ([agent/stream.py](agent/stream.py)): `status` → `chunk`… → `suggestions` → `done`, or `error` with a safe message, the exact shapes `chat.service.ts` parses.
 
 Market figures in [data/area_stats.json](data/area_stats.json) are the notes carried over from dubainest-ai (June 2026) and are marked unverified; the writer quotes their date. Refreshing them from DLD open data is still to do.
@@ -108,7 +112,7 @@ Last run (3 consecutive): routing 40/40, grounding 20/20, every question in 2 mo
 ## Tests and checks
 
 ```bash
-.venv/bin/pytest -q                         # api (fake DynamoDB) + agent (fake models), no AWS
+.venv/bin/pytest -q                         # api (fake DynamoDB), chat SSE contract, agent (fake models); no AWS
 .venv/bin/ruff check api agent evals scripts data
 cd frontend && npm run build
 cd infra && npx cdk synth

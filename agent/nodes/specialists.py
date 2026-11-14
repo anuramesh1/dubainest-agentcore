@@ -10,7 +10,7 @@ from typing import Any
 
 from ..prompts import CONFIRM_PHRASE
 from ..state import AgentState
-from ..tools import area_stats, leads, listings
+from ..tools import area_stats, leads, listings, vector_index
 from .common import AFFIRMATIVE, context_text, history, last
 
 # ── property_search ───────────────────────────────────────────────────────────
@@ -42,6 +42,7 @@ def property_search(state: AgentState) -> dict[str, Any]:
     filters = listings.parse_filters(text)
     named = [listings.summary(p) for p in listings.mentioned_listings(state["prompt"])]
     facts: dict[str, Any] = {}
+    vec_trace: dict[str, Any] = {}
 
     has_filters = any(k in filters for k in (*listings.FILTER_KEYS, "unlisted_areas"))
     open_listing = state.get("property_context")
@@ -55,7 +56,12 @@ def property_search(state: AgentState) -> dict[str, Any]:
         ]
         facts["same_area"] = comps[:4]
     else:
-        result = listings.search(filters, text)
+        semantic = None
+        if not named and not any(k in filters for k in listings.FILTER_KEYS):
+            # Descriptive question ("beach and lagoon lifestyle"): one query embedding.
+            hits, vec_trace = vector_index.rank(text, min_score=0.0)
+            semantic = dict(hits) or None
+        result = listings.search(filters, text, semantic=semantic)
         if filters.get("unlisted_areas"):
             result["not_in_catalogue"] = filters["unlisted_areas"]
         facts.update(result)
@@ -66,7 +72,7 @@ def property_search(state: AgentState) -> dict[str, Any]:
     facts["golden_visa_min_purchase_aed"] = listings.GOLDEN_VISA_AED
     return {
         "facts": {"property_search": facts},
-        "trace": [{"node": "property_search", "matches": facts.get("total_matches")}],
+        "trace": [{"node": "property_search", "matches": facts.get("total_matches"), **vec_trace}],
     }
 
 
