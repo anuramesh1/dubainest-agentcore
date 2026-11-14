@@ -1,4 +1,5 @@
 """Settings from environment variables. Read on each call so tests can override them."""
+
 from __future__ import annotations
 
 import os

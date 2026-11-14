@@ -2,6 +2,7 @@
 
     .venv/bin/pytest api
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -79,10 +80,14 @@ def test_filters_match_seed(client):
         ({"area": "Dubailand"}, lambda p: p["area"] == "Dubailand"),
         ({"type": "townhouse"}, lambda p: p["type"] == "townhouse"),
         ({"bedrooms": 2}, lambda p: p["bedrooms"] == 2),
-        ({"minPrice": 2_000_000, "maxPrice": 5_000_000},
-         lambda p: 2_000_000 <= p["price"] <= 5_000_000),
-        ({"developer": "Emaar", "bedrooms": 3},
-         lambda p: p["developer"] == "Emaar" and p["bedrooms"] == 3),
+        (
+            {"minPrice": 2_000_000, "maxPrice": 5_000_000},
+            lambda p: 2_000_000 <= p["price"] <= 5_000_000,
+        ),
+        (
+            {"developer": "Emaar", "bedrooms": 3},
+            lambda p: p["developer"] == "Emaar" and p["bedrooms"] == 3,
+        ),
     ]
     for params, keep in cases:
         got = {r["id"] for r in client.get("/api/properties", params=params).json()}
@@ -132,9 +137,11 @@ def test_enquiry_saved_to_leads(client):
     r = client.post("/api/enquiries", json=ENQUIRY)
     assert r.status_code == 201
     body = r.json()
-    lead = boto3.resource("dynamodb", region_name="us-east-1").Table("leads-test").get_item(
-        Key={"leadId": body["id"]}
-    )["Item"]
+    lead = (
+        boto3.resource("dynamodb", region_name="us-east-1")
+        .Table("leads-test")
+        .get_item(Key={"leadId": body["id"]})["Item"]
+    )
     assert lead["propertyId"] == "10"
     assert lead["email"] == "buyer@example.com"
     assert lead["source"] == "enquiry_form"

@@ -1,10 +1,10 @@
 """Helpers shared by nodes: history access and the text a node should look at."""
+
 from __future__ import annotations
 
 import re
-from typing import Any
 
-from ..state import AgentState
+from ..state import AgentState, Turn
 
 HISTORY_TURNS = 6
 _FOLLOW_UP = re.compile(r"^\s*(and|what about|how about|also|ok,? and|same for|in)\b", re.I)
@@ -14,7 +14,7 @@ AFFIRMATIVE = re.compile(
 )
 
 
-def history(state: AgentState) -> list[dict[str, Any]]:
+def history(state: AgentState) -> list[Turn]:
     return [t for t in (state.get("history") or []) if (t.get("content") or "").strip()][
         -HISTORY_TURNS:
     ]

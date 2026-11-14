@@ -3,6 +3,7 @@
 Both go through langchain-aws (ChatBedrockConverse) to Amazon Bedrock. Tests
 pass fakes with the same shapes to build_graph(), so they need no AWS.
 """
+
 from __future__ import annotations
 
 import time
@@ -33,14 +34,17 @@ class Route(BaseModel):
 
 def _usage(msg: Any) -> dict[str, int]:
     u = getattr(msg, "usage_metadata", None) or {}
-    return {"input_tokens": int(u.get("input_tokens", 0)),
-            "output_tokens": int(u.get("output_tokens", 0))}
+    return {
+        "input_tokens": int(u.get("input_tokens", 0)),
+        "output_tokens": int(u.get("output_tokens", 0)),
+    }
 
 
 @lru_cache(maxsize=4)
 def _model(model_id: str, max_tokens: int, temperature: float) -> ChatBedrockConverse:
-    return ChatBedrockConverse(model=model_id, region_name=config.region(),
-                               max_tokens=max_tokens, temperature=temperature)
+    return ChatBedrockConverse(
+        model=model_id, region_name=config.region(), max_tokens=max_tokens, temperature=temperature
+    )
 
 
 async def classify(system: str, user: str) -> tuple[Route, dict[str, Any]]:
@@ -51,8 +55,11 @@ async def classify(system: str, user: str) -> tuple[Route, dict[str, Any]]:
     out = await llm.ainvoke([SystemMessage(system), HumanMessage(user)])
     if out.get("parsed") is None:
         raise ValueError(f"router output not parsed: {out.get('parsing_error')}")
-    return out["parsed"], {"model": model_id, "ms": round((time.perf_counter() - t0) * 1000),
-                           **_usage(out["raw"])}
+    return out["parsed"], {
+        "model": model_id,
+        "ms": round((time.perf_counter() - t0) * 1000),
+        **_usage(out["raw"]),
+    }
 
 
 async def stream_text(system: str, user: str, trace: dict[str, Any]) -> AsyncIterator[str]:

@@ -2,6 +2,7 @@
 
 Each returns {"facts": {<its key>: ...}} — the writer may quote only these.
 """
+
 from __future__ import annotations
 
 import re
@@ -25,7 +26,9 @@ def _comparison(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
     out: dict[str, Any] = {
         "lowest_price": {"title": by_price[0]["title"], "price_aed": by_price[0]["price_aed"]},
         "highest_price": {"title": by_price[-1]["title"], "price_aed": by_price[-1]["price_aed"]},
-        "price_per_sqft_aed": {"lowest": min(per_sqft), "highest": max(per_sqft)} if per_sqft else None,
+        "price_per_sqft_aed": (
+            {"lowest": min(per_sqft), "highest": max(per_sqft)} if per_sqft else None
+        ),
     }
     if len(rows) == 2:
         a, b = by_price
@@ -45,8 +48,11 @@ def property_search(state: AgentState) -> dict[str, Any]:
     if open_listing and not has_filters and not named:
         # A question about the listing open in the UI: it, plus others in its area.
         facts["listing"] = open_listing
-        comps = [listings.summary(p) for p in listings.all_listings()
-                 if p["area"] == open_listing["area"] and p["id"] != open_listing["id"]]
+        comps = [
+            listings.summary(p)
+            for p in listings.all_listings()
+            if p["area"] == open_listing["area"] and p["id"] != open_listing["id"]
+        ]
         facts["same_area"] = comps[:4]
     else:
         result = listings.search(filters, text)
@@ -58,8 +64,10 @@ def property_search(state: AgentState) -> dict[str, Any]:
     facts["comparison"] = _comparison(named or facts.get("listings") or [])
     facts["catalogue_size"] = len(listings.all_listings())
     facts["golden_visa_min_purchase_aed"] = listings.GOLDEN_VISA_AED
-    return {"facts": {"property_search": facts},
-            "trace": [{"node": "property_search", "matches": facts.get("total_matches")}]}
+    return {
+        "facts": {"property_search": facts},
+        "trace": [{"node": "property_search", "matches": facts.get("total_matches")}],
+    }
 
 
 # ── market_intel ──────────────────────────────────────────────────────────────
@@ -76,8 +84,7 @@ def market_intel(state: AgentState) -> dict[str, Any]:
     stats = area_stats.for_areas(areas)
     listed = {a: sum(1 for p in listings.all_listings() if p["area"] == a) for a in areas}
     stats["dubainest_listings_per_area"] = listed
-    return {"facts": {"market_intel": stats},
-            "trace": [{"node": "market_intel", "areas": areas}]}
+    return {"facts": {"market_intel": stats}, "trace": [{"node": "market_intel", "areas": areas}]}
 
 
 # ── roi ───────────────────────────────────────────────────────────────────────
@@ -92,13 +99,14 @@ ASSUMPTIONS = {
 }
 
 
-def _monthly_payment(loan: float, rate_pct: float, years: int) -> float:
+def _monthly_payment(loan: float, rate_pct: float, years: float) -> float:
     r, n = rate_pct / 100 / 12, years * 12
     return loan / n if r == 0 else loan * r / (1 - (1 + r) ** -n)
 
 
-def roi_numbers(price: int, gross_yield_pct: float, size_sqft: int | None,
-                non_resident: bool = False) -> dict[str, Any]:
+def roi_numbers(
+    price: int, gross_yield_pct: float, size_sqft: int | None, non_resident: bool = False
+) -> dict[str, Any]:
     a = ASSUMPTIONS
     ltv = a["ltv_pct_non_resident"] if non_resident else a["ltv_pct_resident"]
     rent = price * gross_yield_pct / 100
@@ -152,15 +160,21 @@ def _roi_targets(state: AgentState) -> list[dict[str, Any]]:
 
 
 def roi(state: AgentState) -> dict[str, Any]:
-    non_resident = "non-resident" in state["prompt"].lower() or "non resident" in state["prompt"].lower()
+    non_resident = (
+        "non-resident" in state["prompt"].lower() or "non resident" in state["prompt"].lower()
+    )
     results = []
     for p in _roi_targets(state):
         s = listings.summary(p)
         y, basis = p["roi"], "listing's estimated gross yield"
         if not y:
-            y, basis = area_stats.yield_midpoint(p["area"]), "area benchmark midpoint (off-plan listing)"
-        entry: dict[str, Any] = {"listing": {k: s[k] for k in ("id", "title", "area", "status",
-                                                               "size_sqft", "link")}}
+            y, basis = (
+                area_stats.yield_midpoint(p["area"]),
+                "area benchmark midpoint (off-plan listing)",
+            )
+        entry: dict[str, Any] = {
+            "listing": {k: s[k] for k in ("id", "title", "area", "status", "size_sqft", "link")}
+        }
         if y:
             entry["yield_basis"] = basis
             entry.update(roi_numbers(p["price"], y, p["sizeSqft"], non_resident))
@@ -172,7 +186,9 @@ def roi(state: AgentState) -> dict[str, Any]:
     if not results:
         f = listings.parse_filters(context_text(state))
         facts["note"] = "No specific listing in the question; area benchmarks only."
-        facts["benchmarks"] = area_stats.for_areas(f.get("areas") or sorted(area_stats.load()["areas"]))
+        facts["benchmarks"] = area_stats.for_areas(
+            f.get("areas") or sorted(area_stats.load()["areas"])
+        )
     return {"facts": {"roi": facts}, "trace": [{"node": "roi", "listings": len(results)}]}
 
 
@@ -181,7 +197,9 @@ def roi(state: AgentState) -> dict[str, Any]:
 _EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 _PHONE = re.compile(r"(?<!\w)(\+?\d[\d\s-]{6,}\d)(?!\w)")
 # Prefix in any case ("I'm", "my name is"); the name itself must be capitalised.
-_NAME = re.compile(r"\b(?i:my name is|i am|i'm|i’m|this is|name:)\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})")
+_NAME = re.compile(
+    r"\b(?i:my name is|i am|i'm|i’m|this is|name:)\s+([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})"
+)
 _WHEN = re.compile(
     r"\b((?:next\s+)?(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*(?:day)?|today|tomorrow|this weekend|"
     r"next week|weekend|\d{1,2}(?:st|nd|rd|th)?\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|"
@@ -214,9 +232,16 @@ def _details(state: AgentState) -> dict[str, Any]:
 
 def scheduler(state: AgentState) -> dict[str, Any]:
     d = _details(state)
-    missing = [k for k, ok in (("property", "property" in d), ("date and time", "when" in d),
-                               ("name", "name" in d), ("email or phone", "email" in d or "phone" in d))
-               if not ok]
+    missing = [
+        k
+        for k, ok in (
+            ("property", "property" in d),
+            ("date and time", "when" in d),
+            ("name", "name" in d),
+            ("email or phone", "email" in d or "phone" in d),
+        )
+        if not ok
+    ]
     request = {
         "property": d["property"]["title"] if "property" in d else None,
         "link": f"/property/{d['property']['id']}" if "property" in d else None,
@@ -226,18 +251,27 @@ def scheduler(state: AgentState) -> dict[str, Any]:
         "phone": d.get("phone"),
     }
     confirming = CONFIRM_PHRASE in last(state, "assistant") and AFFIRMATIVE.match(state["prompt"])
+    extra: dict[str, Any]
     if missing:
         status, extra = "need_details", {"missing": missing}
     elif confirming:
-        lead_id = leads.save_viewing_request({
-            "property_id": d["property"]["id"], "property_title": d["property"]["title"],
-            "when": d["when"], "name": d["name"], "email": d.get("email"), "phone": d.get("phone"),
-        })
+        lead_id = leads.save_viewing_request(
+            {
+                "property_id": d["property"]["id"],
+                "property_title": d["property"]["title"],
+                "when": d["when"],
+                "name": d["name"],
+                "email": d.get("email"),
+                "phone": d.get("phone"),
+            }
+        )
         status, extra = "saved", {"reference": lead_id[:8].upper()}
     else:
         status, extra = "confirm", {}
-    return {"facts": {"scheduler": {"status": status, "request": request, **extra}},
-            "trace": [{"node": "scheduler", "status": status}]}
+    return {
+        "facts": {"scheduler": {"status": status, "request": request, **extra}},
+        "trace": [{"node": "scheduler", "status": status}],
+    }
 
 
 # ── general ───────────────────────────────────────────────────────────────────
@@ -245,10 +279,26 @@ def scheduler(state: AgentState) -> dict[str, Any]:
 
 def general(state: AgentState) -> dict[str, Any]:
     rows = listings.all_listings()
-    by = lambda key: {v: sum(1 for p in rows if p[key] == v) for v in sorted({p[key] for p in rows})}  # noqa: E731
-    return {"facts": {"general": {
-        "can_help_with": ["finding listings", "Dubai market and area trends",
-                          "ROI, yield and mortgage estimates", "requesting a viewing"],
-        "catalogue": {"listings": len(rows), "by_developer": by("developer"), "by_area": by("area"),
-                      "price_range_aed": [rows[0]["price"], rows[-1]["price"]]},
-    }}, "trace": [{"node": "general"}]}
+
+    def by(key: str) -> dict[str, int]:
+        return {v: sum(1 for p in rows if p[key] == v) for v in sorted({p[key] for p in rows})}
+
+    return {
+        "facts": {
+            "general": {
+                "can_help_with": [
+                    "finding listings",
+                    "Dubai market and area trends",
+                    "ROI, yield and mortgage estimates",
+                    "requesting a viewing",
+                ],
+                "catalogue": {
+                    "listings": len(rows),
+                    "by_developer": by("developer"),
+                    "by_area": by("area"),
+                    "price_range_aed": [rows[0]["price"], rows[-1]["price"]],
+                },
+            }
+        },
+        "trace": [{"node": "general"}],
+    }

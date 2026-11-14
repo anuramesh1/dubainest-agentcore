@@ -1,9 +1,10 @@
 """router: one Nova Micro call → 1-2 intents. Keyword router when unsure or on error."""
+
 from __future__ import annotations
 
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 
 from ..prompts import CONFIRM_PHRASE, ROUTER_SYSTEM
 from ..state import AgentState, Intent
@@ -14,22 +15,91 @@ log = logging.getLogger(__name__)
 
 # Ported from dubainest-ai orchestrator.py, with a few words added. Order = priority.
 _KEYWORDS: list[tuple[Intent, tuple[str, ...]]] = [
-    ("scheduler", ("schedule", "viewing", "visit", "book", "appointment", "tour", "see the property",
-                   "open house", "meeting")),
-    ("roi", ("roi", "yield", "rental income", "rent ", "investment return", "return on", "cashflow",
-             "cash flow", "payback", "mortgage", "break-even", "break even")),
-    ("market_intel", ("market", "trend", "demand", "supply", "growth", "forecast", "golden visa",
-                      "appreciation", "off-plan vs", "neighbourhood", "neighborhood", "which area")),
-    ("property_search", ("property", "properties", "apartment", "villa", "townhouse", "penthouse",
-                         "studio", "bedroom", "br ", "listing", "price", "developer", "buy", "sqft",
-                         "show me", "find", "damac", "emaar", "nakheel")),
+    (
+        "scheduler",
+        (
+            "schedule",
+            "viewing",
+            "visit",
+            "book",
+            "appointment",
+            "tour",
+            "see the property",
+            "open house",
+            "meeting",
+        ),
+    ),
+    (
+        "roi",
+        (
+            "roi",
+            "yield",
+            "rental income",
+            "rent ",
+            "investment return",
+            "return on",
+            "cashflow",
+            "cash flow",
+            "payback",
+            "mortgage",
+            "break-even",
+            "break even",
+        ),
+    ),
+    (
+        "market_intel",
+        (
+            "market",
+            "trend",
+            "demand",
+            "supply",
+            "growth",
+            "forecast",
+            "golden visa",
+            "appreciation",
+            "off-plan vs",
+            "neighbourhood",
+            "neighborhood",
+            "which area",
+        ),
+    ),
+    (
+        "property_search",
+        (
+            "property",
+            "properties",
+            "apartment",
+            "villa",
+            "townhouse",
+            "penthouse",
+            "studio",
+            "bedroom",
+            "br ",
+            "listing",
+            "price",
+            "developer",
+            "buy",
+            "sqft",
+            "show me",
+            "find",
+            "damac",
+            "emaar",
+            "nakheel",
+        ),
+    ),
 ]
 
 
 # Two-specialist fan-out only for combinations that make sense together. The
 # scheduler is never a second intent: it would make the answer ask for viewing details.
-_PAIRS = {frozenset(p) for p in (("property_search", "roi"), ("property_search", "market_intel"),
-                                 ("market_intel", "roi"))}
+_PAIRS = {
+    frozenset(p)
+    for p in (
+        ("property_search", "roi"),
+        ("property_search", "market_intel"),
+        ("market_intel", "roi"),
+    )
+}
 
 
 def keyword_route(text: str) -> Intent:
@@ -58,24 +128,39 @@ def _router_user_message(state: AgentState) -> str:
 async def router(state: AgentState, *, classify, min_confidence: float) -> dict[str, Any]:
     prompt = state["prompt"]
     open_listing = listings.get(state.get("property_id"))
-    update: dict[str, Any] = {"property_context": listings.summary(open_listing) if open_listing else None}
-    state = {**state, **update}
+    update: dict[str, Any] = {
+        "property_context": listings.summary(open_listing) if open_listing else None
+    }
+    state = cast(AgentState, {**state, **update})
 
     # A "yes" right after the viewing confirmation is always the scheduler (no model call).
     if CONFIRM_PHRASE in last(state, "assistant") and AFFIRMATIVE.match(prompt):
-        return {**update, "intents": ["scheduler"],
-                "trace": [{"node": "router", "rule": "viewing_confirmation"}]}
+        return {
+            **update,
+            "intents": ["scheduler"],
+            "trace": [{"node": "router", "rule": "viewing_confirmation"}],
+        }
 
     try:
         route, call = await classify(ROUTER_SYSTEM, _router_user_message(state))
     except Exception as exc:  # noqa: BLE001 — any model failure falls back to keywords
         log.warning("router model failed, using keywords: %s", exc)
         intent = keyword_route(context_text(state))
-        return {**update, "intents": [intent],
-                "trace": [{"node": "router", "rule": "keywords_after_error", "error": type(exc).__name__}]}
+        return {
+            **update,
+            "intents": [intent],
+            "trace": [
+                {"node": "router", "rule": "keywords_after_error", "error": type(exc).__name__}
+            ],
+        }
 
-    entry = {"node": "router", **call, "intent": route.intent, "second_intent": route.second_intent,
-             "confidence": route.confidence}
+    entry = {
+        "node": "router",
+        **call,
+        "intent": route.intent,
+        "second_intent": route.second_intent,
+        "confidence": route.confidence,
+    }
     if route.confidence < min_confidence and route.intent != "off_topic":
         intent = keyword_route(context_text(state))
         entry["rule"] = f"keywords_low_confidence→{intent}"

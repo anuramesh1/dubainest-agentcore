@@ -1,4 +1,5 @@
 """Response and request shapes. They must match frontend/src/app/models (spec §2)."""
+
 from __future__ import annotations
 
 from datetime import datetime

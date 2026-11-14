@@ -3,6 +3,7 @@
 Templated from the listing's own fields, with no model call (spec §2), ported
 from dubainest-ai AgentService.property_intro. POST /api/chat arrives in step 4.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException

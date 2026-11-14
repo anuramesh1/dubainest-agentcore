@@ -7,6 +7,7 @@
 Uses your AWS credentials for Bedrock. Listings come from the Properties table
 unless LISTINGS_SOURCE=seed. Prints the stream as the UI would receive it.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,8 +27,11 @@ async def main() -> None:
     a = p.parse_args()
 
     final: dict = {}
-    request = {"prompt": a.prompt, "property_id": a.property_id,
-               "history": json.loads(a.history) if a.history else []}
+    request = {
+        "prompt": a.prompt,
+        "property_id": a.property_id,
+        "history": json.loads(a.history) if a.history else [],
+    }
     async for ev in stream_events(request, on_final=final.update):
         if a.events:
             print(json.dumps(ev, ensure_ascii=False))

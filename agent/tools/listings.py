@@ -3,6 +3,7 @@
 Source (LISTINGS_SOURCE): `dynamodb` reads the shared Properties table with one
 Scan at first use (spec §7); `seed` reads data/mock_properties.py (evals, tests).
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -39,10 +40,9 @@ def _load_seed() -> list[dict[str, Any]]:
 def _load_dynamodb() -> list[dict[str, Any]]:
     import boto3
 
-    table = boto3.resource("dynamodb", region_name=config.region()).Table(
-        config.properties_table()
-    )
-    items, kwargs = [], {}
+    table = boto3.resource("dynamodb", region_name=config.region()).Table(config.properties_table())
+    items: list[dict[str, Any]] = []
+    kwargs: dict[str, Any] = {}
     while True:
         resp = table.scan(**kwargs)
         items.extend(resp.get("Items", []))
@@ -112,14 +112,29 @@ AREA_ALIASES = {
     "dubai land": "Dubailand",
 }
 # Areas people ask about that have no listings in the catalogue.
-UNLISTED_AREAS = {"dubai marina": "Dubai Marina", "marina": "Dubai Marina", "jvc": "JVC",
-                  "jumeirah village": "JVC", "meydan": "Meydan", "bluewaters": "Bluewaters Island"}
+UNLISTED_AREAS = {
+    "dubai marina": "Dubai Marina",
+    "marina": "Dubai Marina",
+    "jvc": "JVC",
+    "jumeirah village": "JVC",
+    "meydan": "Meydan",
+    "bluewaters": "Bluewaters Island",
+}
 DEVELOPERS = {"damac": "DAMAC", "emaar": "Emaar", "nakheel": "Nakheel"}
-TYPES = {"studio": "studio", "apartment": "apartment", "flat": "apartment", "villa": "villa",
-         "townhouse": "townhouse", "town house": "townhouse", "penthouse": "penthouse"}
+TYPES = {
+    "studio": "studio",
+    "apartment": "apartment",
+    "flat": "apartment",
+    "villa": "villa",
+    "townhouse": "townhouse",
+    "town house": "townhouse",
+    "penthouse": "penthouse",
+}
 
 _AMOUNT = r"(?:aed\s*)?(\d+(?:[.,]\d+)*)\s*(m\b|mn\b|million|k\b|thousand)?(?:\s*aed)?"
-_MAX_WORDS = r"(?:under|below|less than|up to|upto|max(?:imum)?|budget(?: of| is)?|within|no more than)"
+_MAX_WORDS = (
+    r"(?:under|below|less than|up to|upto|max(?:imum)?|budget(?: of| is)?|within|no more than)"
+)
 _MIN_WORDS = r"(?:over|above|more than|at least|minimum|min|from|starting at)"
 # "more than 2 bedrooms", "at least 5% yield", "over 1,000 sqft" are not prices.
 _NOT_A_PRICE = r"(?!\s*(?:-|\s)?(?:br|bed|bhk|bath|%|percent|sq|year|yr))"
@@ -199,8 +214,16 @@ def parse_filters(text: str) -> dict[str, Any]:
     return f
 
 
-FILTER_KEYS = ("areas", "developers", "types", "bedrooms", "min_bedrooms", "min_price",
-               "max_price", "status")
+FILTER_KEYS = (
+    "areas",
+    "developers",
+    "types",
+    "bedrooms",
+    "min_bedrooms",
+    "min_price",
+    "max_price",
+    "status",
+)
 
 
 def search(filters: dict[str, Any], text: str = "", limit: int = 5) -> dict[str, Any]:
@@ -244,8 +267,10 @@ def search(filters: dict[str, Any], text: str = "", limit: int = 5) -> dict[str,
     }
 
 
-_STOP = set("a an the in of for to and or with me my i is are what which show find any some "
-            "dubai property properties listing listings home homes buy".split())
+_STOP = set(
+    "a an the in of for to and or with me my i is are what which show find any some "
+    "dubai property properties listing listings home homes buy".split()
+)
 
 
 def _keyword_rank(text: str) -> list[dict[str, Any]]:

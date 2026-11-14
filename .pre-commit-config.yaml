@@ -1,10 +1,10 @@
 # ─────────────────────────────────────────────────────────
-# DubaiNest AI · pre-commit configuration
+# DubaiNest AgentCore · pre-commit configuration
 # Install:  pip install pre-commit && pre-commit install
 # Run all:  pre-commit run --all-files
 # ─────────────────────────────────────────────────────────
 default_language_version:
-  python: python3.11
+  python: python3.12
   node: "20.11.0"
 
 repos:
@@ -31,7 +31,7 @@ repos:
     rev: 24.4.2
     hooks:
       - id: black
-        language_version: python3.11
+        language_version: python3.12
         files: ^(api|agent|data|scripts|evals)/.*\.py$
 
   # ── Python: Ruff (linter + import sorting) ─────────────

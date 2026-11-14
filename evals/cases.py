@@ -1,5 +1,6 @@
 """Labelled cases. Expected intents are tuples: any one of them counts as correct
 (a few questions are honestly ambiguous, e.g. "is 8% yield realistic?")."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -16,7 +17,9 @@ class Case:
 
 
 def _h(*turns: str) -> list[dict]:
-    return [{"role": "user" if i % 2 == 0 else "assistant", "content": t} for i, t in enumerate(turns)]
+    return [
+        {"role": "user" if i % 2 == 0 else "assistant", "content": t} for i, t in enumerate(turns)
+    ]
 
 
 ROUTING: list[Case] = [
@@ -29,8 +32,13 @@ ROUTING: list[Case] = [
     Case("Compare Burj Vista and Park Heights", ("property_search",)),
     Case("Do you have any penthouses?", ("property_search",)),
     Case("Which properties have a golf course view?", ("property_search",)),
-    Case("and in Palm Jumeirah?", ("property_search",),
-         history=_h("Show me 3 bedroom villas in Dubai Hills", "Here are 2 villas in Dubai Hills Estate...")),
+    Case(
+        "and in Palm Jumeirah?",
+        ("property_search",),
+        history=_h(
+            "Show me 3 bedroom villas in Dubai Hills", "Here are 2 villas in Dubai Hills Estate..."
+        ),
+    ),
     # market_intel (8)
     Case("How is the Downtown Dubai market doing?", ("market_intel",)),
     Case("Is Business Bay or Dubai Hills better for a family?", ("market_intel",)),
@@ -48,14 +56,21 @@ ROUTING: list[Case] = [
     Case("Expected rental income for a studio in Business Bay?", ("roi",)),
     Case("Is an 8% yield realistic in Dubai?", ("roi", "market_intel")),
     Case("What's the expected ROI?", ("roi",), property_id="1"),
-    Case("what about its yield?", ("roi",),
-         history=_h("Tell me about Burj Vista", "Burj Vista is a 1BR in Downtown Dubai...")),
+    Case(
+        "what about its yield?",
+        ("roi",),
+        history=_h("Tell me about Burj Vista", "Burj Vista is a 1BR in Downtown Dubai..."),
+    ),
     # scheduler (6)
     Case("Can I book a viewing of Burj Vista on Saturday?", ("scheduler",)),
     Case("I'd like to see this property this weekend", ("scheduler",), property_id="10"),
     Case("Schedule a tour of Palm Gateway", ("scheduler",)),
-    Case("My name is Omar Ali, omar@example.com, Tuesday at 3pm", ("scheduler",), property_id="1",
-         history=_h("Book a viewing please", "Sure — what day and time, and your name and email?")),
+    Case(
+        "My name is Omar Ali, omar@example.com, Tuesday at 3pm",
+        ("scheduler",),
+        property_id="1",
+        history=_h("Book a viewing please", "Sure — what day and time, and your name and email?"),
+    ),
     Case("Can I move my viewing to Sunday?", ("scheduler",)),
     Case("Arrange a video-call viewing of DAMAC Islands", ("scheduler",)),
     # general (4)
@@ -91,7 +106,12 @@ GROUNDING: list[Case] = [
     Case("Is DAMAC Islands a good investment?"),
     Case("How much cash do I need to buy Creek Rise with a mortgage?"),
     Case("Book a viewing of Burj Vista on Saturday 10am, I'm Sara Khan, sara@example.com"),
-    Case("yes", property_id="1",
-         history=_h("Book a viewing on Saturday 10am, I'm Sara Khan, sara@example.com",
-                    f"Burj Vista, Saturday 10am, Sara Khan, sara@example.com. {CONFIRM_PHRASE}")),
+    Case(
+        "yes",
+        property_id="1",
+        history=_h(
+            "Book a viewing on Saturday 10am, I'm Sara Khan, sara@example.com",
+            f"Burj Vista, Saturday 10am, Sara Khan, sara@example.com. {CONFIRM_PHRASE}",
+        ),
+    ),
 ]

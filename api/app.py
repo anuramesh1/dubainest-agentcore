@@ -6,6 +6,7 @@ AWS:    the same app inside the api Lambda, run by Lambda Web Adapter (step 5).
 Routes so far (spec §2): properties, facets, property detail, enquiries,
 property-intro. POST /api/chat is added in step 4.
 """
+
 from __future__ import annotations
 
 import logging

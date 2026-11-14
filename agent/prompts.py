@@ -1,4 +1,5 @@
 """Prompts for the router and the writer, and the fixed replies."""
+
 from __future__ import annotations
 
 SUGGESTIONS_MARKER = "<<SUGGESTIONS>>"

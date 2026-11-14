@@ -1,4 +1,5 @@
 """Viewing requests → the shared Leads table. Called only after the user confirms (spec §10)."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

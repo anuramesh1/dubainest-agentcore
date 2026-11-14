@@ -4,6 +4,7 @@ then a <<SUGGESTIONS>> block that is turned into the UI's `suggestions` event.
 Text is streamed to the UI as custom events while it is generated; the marker
 and what follows it are held back, even when the marker is split across chunks.
 """
+
 from __future__ import annotations
 
 import json
@@ -43,9 +44,13 @@ def _user_message(state: AgentState, facts: dict[str, Any]) -> str:
     parts = ["FACTS:", json.dumps(facts, ensure_ascii=False, indent=1, default=str)]
     if conv := transcript(state):
         parts += ["", "CONVERSATION SO FAR:", conv]
-    parts += ["", f"QUESTION: {state['prompt']}", "",
-              "(Answer from FACTS only. Every AED amount you write must appear in FACTS "
-              "exactly: no differences, totals, ranges or other arithmetic.)"]
+    parts += [
+        "",
+        f"QUESTION: {state['prompt']}",
+        "",
+        "(Answer from FACTS only. Every AED amount you write must appear in FACTS "
+        "exactly: no differences, totals, ranges or other arithmetic.)",
+    ]
     return "\n".join(parts)
 
 
@@ -71,7 +76,7 @@ async def writer(state: AgentState, *, stream_text) -> dict[str, Any]:
         answer, suggestions = buffer.strip(), []
     else:
         answer = buffer[:marker_at].strip()
-        suggestions = parse_suggestions(buffer[marker_at + len(SUGGESTIONS_MARKER):])
+        suggestions = parse_suggestions(buffer[marker_at + len(SUGGESTIONS_MARKER) :])
     if suggestions:
         emit({"event_type": "suggestions", "content": suggestions})
 
@@ -79,8 +84,11 @@ async def writer(state: AgentState, *, stream_text) -> dict[str, Any]:
     mismatches = ungrounded(answer, facts, user_text)
     if mismatches:
         log.warning("ungrounded AED figures: %s", mismatches)
-    return {"answer": answer, "suggestions": suggestions,
-            "trace": [{"node": "writer", **call, "ungrounded": mismatches}]}
+    return {
+        "answer": answer,
+        "suggestions": suggestions,
+        "trace": [{"node": "writer", **call, "ungrounded": mismatches}],
+    }
 
 
 def off_topic(state: AgentState) -> dict[str, Any]:

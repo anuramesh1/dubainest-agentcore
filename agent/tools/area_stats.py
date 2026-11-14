@@ -1,4 +1,5 @@
 """data/area_stats.json: dated market figures, replacing the old hard-coded prompt paragraph."""
+
 from __future__ import annotations
 
 import json
@@ -20,9 +21,16 @@ def for_areas(areas: list[str]) -> dict[str, Any]:
         "source": data["source"],
         "verified": data["verified"],
         "overview": data["overview"],
-        "areas": {a: data["areas"].get(a, {"gross_yield_pct": None,
-                                           "profile": "No figures for this area in the market notes."})
-                  for a in areas},
+        "areas": {
+            a: data["areas"].get(
+                a,
+                {
+                    "gross_yield_pct": None,
+                    "profile": "No figures for this area in the market notes.",
+                },
+            )
+            for a in areas
+        },
     }
 
 

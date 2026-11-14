@@ -8,6 +8,7 @@ each instance scans the table once, keeps it for PROPERTIES_CACHE_SECONDS
 (default 60), and filters in Python. The agent does the same at container start
 (spec §7). Results and their order are the same as before: sorted by price.
 """
+
 from __future__ import annotations
 
 import threading

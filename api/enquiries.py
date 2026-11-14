@@ -4,6 +4,7 @@ dubainest-ai kept enquiries in process memory, so they were lost on restart and
 never reached Leads. Here each one is a Leads item (spec §7), keyed by leadId,
 findable per listing through the table's ByProperty index (propertyId, createdAt).
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,9 +28,7 @@ def create_enquiry(enquiry: EnquiryCreate) -> EnquiryRead:
         raise HTTPException(status_code=404, detail="Property not found")
 
     record = EnquiryRead(id=str(uuid4()), created_at=datetime.now(UTC), **enquiry.model_dump())
-    table = boto3.resource("dynamodb", region_name=settings.region()).Table(
-        settings.leads_table()
-    )
+    table = boto3.resource("dynamodb", region_name=settings.region()).Table(settings.leads_table())
     table.put_item(
         Item={
             "leadId": record.id,

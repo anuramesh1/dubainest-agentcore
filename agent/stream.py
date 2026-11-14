@@ -6,6 +6,7 @@
 Used in-process now (AGENT_MODE=local, evals) and by the AgentCore entrypoint
 from step 6, so the event stream is identical in both places.
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,8 +39,10 @@ async def stream_events(
     state_in = {
         "prompt": request["prompt"],
         "property_id": request.get("property_id"),
-        "history": [{"role": t.get("role", ""), "content": t.get("content", "")}
-                    for t in (request.get("history") or [])],
+        "history": [
+            {"role": t.get("role", ""), "content": t.get("content", "")}
+            for t in (request.get("history") or [])
+        ],
         "locale": request.get("locale") or "en",
         "facts": {},
         "trace": [],

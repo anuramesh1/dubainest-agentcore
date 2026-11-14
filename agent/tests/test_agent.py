@@ -2,6 +2,7 @@
 
     .venv/bin/pytest agent
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -38,36 +39,51 @@ def fake_classify(intent, second=None, confidence=0.9, calls=None):
         if calls is not None:
             calls.append(user)
         return Route(intent=intent, second_intent=second, confidence=confidence), {
-            "model": "fake-router", "input_tokens": 10, "output_tokens": 5}
+            "model": "fake-router",
+            "input_tokens": 10,
+            "output_tokens": 5,
+        }
+
     return classify
 
 
 def fake_writer(text, calls=None):
     """Streams `text` in 7-character pieces, so the marker is split across chunks."""
+
     async def stream_text(system, user, trace):
         if calls is not None:
             calls.append(user)
         for i in range(0, len(text), 7):
-            yield text[i:i + 7]
+            yield text[i : i + 7]
         trace.update(model="fake-writer", input_tokens=100, output_tokens=50)
+
     return stream_text
 
 
-ANSWER = ("**Burj Vista costs AED 1,850,000.**\n- 994 sqft\n"
-          f"{SUGGESTIONS_MARKER}\n- What is the yield?\n- Any 2BR nearby?\n- Book a viewing\n- extra")
+ANSWER = (
+    "**Burj Vista costs AED 1,850,000.**\n- 994 sqft\n"
+    f"{SUGGESTIONS_MARKER}\n- What is the yield?\n- Any 2BR nearby?\n- Book a viewing\n- extra"
+)
 
 
 def run(graph, prompt, property_id=None, history=None):
     final: dict = {}
 
     async def go():
-        return [e async for e in stream_events(
-            {"prompt": prompt, "property_id": property_id, "history": history or []},
-            graph=graph, on_final=final.update)]
+        return [
+            e
+            async for e in stream_events(
+                {"prompt": prompt, "property_id": property_id, "history": history or []},
+                graph=graph,
+                on_final=final.update,
+            )
+        ]
+
     return asyncio.run(go()), final
 
 
 # ── SSE contract ──────────────────────────────────────────────────────────────
+
 
 def test_event_order_and_marker_never_leaks():
     g = build_graph(fake_classify("property_search"), fake_writer(ANSWER))
@@ -86,20 +102,24 @@ def test_no_marker_means_no_suggestions_event():
     g = build_graph(fake_classify("general"), fake_writer("Hello! I can help with listings."))
     events, _ = run(g, "hi")
     assert "suggestions" not in [e["event_type"] for e in events]
-    assert "".join(e["content"] for e in events if e["event_type"] == "chunk") == \
-        "Hello! I can help with listings."
+    assert (
+        "".join(e["content"] for e in events if e["event_type"] == "chunk")
+        == "Hello! I can help with listings."
+    )
 
 
 def test_model_failure_gives_safe_error_and_no_done():
     async def broken(system, user, trace):
         raise RuntimeError("bedrock down")
         yield  # pragma: no cover
+
     events, _ = run(build_graph(fake_classify("general"), broken), "hi")
     assert events[-1] == {"role": "assistant", "event_type": "error", "content": SAFE_ERROR}
     assert "done" not in [e["event_type"] for e in events]
 
 
 # ── Routing and graph shape ───────────────────────────────────────────────────
+
 
 def test_off_topic_skips_writer():
     calls: list = []
@@ -130,6 +150,7 @@ def test_low_confidence_uses_keywords():
 def test_router_error_uses_keywords():
     async def broken(system, user):
         raise TimeoutError
+
     _, final = run(build_graph(broken, fake_writer(ANSWER)), "book a viewing please")
     assert final["intents"] == ["scheduler"]
 
@@ -152,14 +173,21 @@ def test_open_listing_goes_to_router_and_facts():
 
 # ── Specialists ───────────────────────────────────────────────────────────────
 
+
 def test_filters():
     f = listings.parse_filters("2 bed apartments in Business Bay or Downtown under 3M")
-    assert f == {"areas": ["Business Bay", "Downtown Dubai"], "types": ["apartment"],
-                 "bedrooms": 2, "max_price": 3_000_000}
+    assert f == {
+        "areas": ["Business Bay", "Downtown Dubai"],
+        "types": ["apartment"],
+        "bedrooms": 2,
+        "max_price": 3_000_000,
+    }
     assert listings.parse_filters("more than 2 bedrooms")["min_bedrooms"] == 3
     assert "min_price" not in listings.parse_filters("handover from 2027 in Palm")
     assert listings.parse_filters("between 1.5 and 3 million") == {
-        "min_price": 1_500_000, "max_price": 3_000_000}
+        "min_price": 1_500_000,
+        "max_price": 3_000_000,
+    }
     assert listings.parse_filters("flats in the Marina")["unlisted_areas"] == ["Dubai Marina"]
 
 
@@ -191,22 +219,34 @@ def test_off_plan_roi_uses_area_benchmark_or_says_none():
 
 # ── Viewing flow: write only after an explicit yes ────────────────────────────
 
+
 def test_viewing_flow(saved_leads):
     g = build_graph(fake_classify("scheduler"), fake_writer("ok"))
     _, f1 = run(g, "I'd like to book a viewing", property_id="10")
     s1 = f1["facts"]["scheduler"]
-    assert s1["status"] == "need_details" and set(s1["missing"]) == {"date and time", "name",
-                                                                     "email or phone"}
-    history = [{"role": "user", "content": "I'd like to book a viewing"},
-               {"role": "assistant", "content": "Sure, when and who?"}]
-    _, f2 = run(g, "Saturday at 11am, my name is Sara Khan, sara@example.com",
-                property_id="10", history=history)
+    assert s1["status"] == "need_details" and set(s1["missing"]) == {
+        "date and time",
+        "name",
+        "email or phone",
+    }
+    history = [
+        {"role": "user", "content": "I'd like to book a viewing"},
+        {"role": "assistant", "content": "Sure, when and who?"},
+    ]
+    _, f2 = run(
+        g,
+        "Saturday at 11am, my name is Sara Khan, sara@example.com",
+        property_id="10",
+        history=history,
+    )
     s2 = f2["facts"]["scheduler"]
     assert s2["status"] == "confirm" and saved_leads == []
     assert s2["request"]["when"] == "Saturday 11am" and s2["request"]["name"] == "Sara Khan"
 
-    history += [{"role": "user", "content": "Saturday at 11am, my name is Sara Khan, sara@example.com"},
-                {"role": "assistant", "content": f"Here is the request. {CONFIRM_PHRASE}"}]
+    history += [
+        {"role": "user", "content": "Saturday at 11am, my name is Sara Khan, sara@example.com"},
+        {"role": "assistant", "content": f"Here is the request. {CONFIRM_PHRASE}"},
+    ]
     _, f3 = run(g, "yes", property_id="10", history=history)
     assert f3["facts"]["scheduler"]["status"] == "saved"
     assert len(saved_leads) == 1
@@ -218,13 +258,16 @@ def test_viewing_flow(saved_leads):
 
 def test_yes_without_confirmation_writes_nothing(saved_leads):
     g = build_graph(fake_classify("scheduler"), fake_writer("ok"))
-    history = [{"role": "user", "content": "Viewing Saturday 11am, I'm Sara, sara@example.com"},
-               {"role": "assistant", "content": "Which property?"}]
+    history = [
+        {"role": "user", "content": "Viewing Saturday 11am, I'm Sara, sara@example.com"},
+        {"role": "assistant", "content": "Which property?"},
+    ]
     run(g, "yes", property_id="10", history=history)
     assert saved_leads == []
 
 
 # ── Grounding check ───────────────────────────────────────────────────────────
+
 
 def test_grounding():
     facts = {"x": {"price_aed": 1_850_000, "rent": 97_125}}

@@ -1,6 +1,7 @@
 """Post-check (spec §10): every AED amount in the answer must come from `facts`
 (or from the user's own words). Mismatches are logged to the trace; the
 grounding eval fails on any."""
+
 from __future__ import annotations
 
 import re
@@ -60,7 +61,13 @@ def _numbers(obj: Any) -> Iterable[float]:
 def ungrounded(answer: str, facts: dict[str, Any], user_text: str = "") -> list[str]:
     # Signs are written in words ("a negative cash flow of AED 13,313"), so compare sizes.
     allowed = {abs(v) for v in _numbers(facts)} | {a for _, a, _ in aed_amounts(user_text)}
-    allowed |= {float(n.replace(",", "")) * _MULT.get((u or "").lower(), 1)
-                for n, u in re.findall(rf"{_NUM}\s*{_UNIT}", user_text, re.I) if n}
-    return [written for written, amount, tol in aed_amounts(answer)
-            if not any(abs(amount - v) <= tol for v in allowed)]
+    allowed |= {
+        float(n.replace(",", "")) * _MULT.get((u or "").lower(), 1)
+        for n, u in re.findall(rf"{_NUM}\s*{_UNIT}", user_text, re.I)
+        if n
+    }
+    return [
+        written
+        for written, amount, tol in aed_amounts(answer)
+        if not any(abs(amount - v) <= tol for v in allowed)
+    ]

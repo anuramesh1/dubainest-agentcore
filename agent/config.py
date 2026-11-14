@@ -1,4 +1,5 @@
 """Agent settings from environment variables (read on use, so tests can override)."""
+
 from __future__ import annotations
 
 import os
