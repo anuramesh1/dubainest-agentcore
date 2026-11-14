@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as cdk from "aws-cdk-lib";
+import { AgentStack } from "../lib/agent-stack";
 import { ApiStack } from "../lib/api-stack";
 import { FrontendStack } from "../lib/frontend-stack";
 import { ObservabilityStack } from "../lib/observability-stack";
@@ -15,8 +16,8 @@ import { ObservabilityStack } from "../lib/observability-stack";
 // with DubaiNestAgentCore / dubainest-agentcore, so a deploy from this folder
 // can never update the old DubaiNest* stacks.
 //
-// ApiStack (Lambda + Function URL) since step 5; AgentStack (AgentCore
-// Runtime) arrives in step 6. Deploy with scripts/deploy.sh.
+// ApiStack (Lambda + Function URL) since step 5, AgentStack (AgentCore
+// Runtime) since step 6. Deploy with scripts/deploy.sh.
 
 const app = new cdk.App();
 
@@ -55,6 +56,15 @@ const api = new ApiStack(app, "DubaiNestAgentCoreApiStack", {
   leadsTableName,
   mediaBaseUrl,
   description: "DubaiNest AgentCore — api Lambda (Function URL, streaming)",
+});
+
+new AgentStack(app, "DubaiNestAgentCoreAgentStack", {
+  ...stackProps,
+  isProd,
+  propertiesTableName,
+  leadsTableName,
+  description:
+    "DubaiNest AgentCore — LangGraph + Strands agents on AgentCore Runtime, DynamoDB memory",
 });
 
 new FrontendStack(app, "DubaiNestAgentCoreFrontendStack", {

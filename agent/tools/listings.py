@@ -72,7 +72,7 @@ GOLDEN_VISA_AED = 2_000_000  # also in area_stats.json overview
 
 
 def summary(p: dict[str, Any]) -> dict[str, Any]:
-    """The fields the writer may quote. `gross_yield_pct` 0 means no estimate (off-plan)."""
+    """The fields an agent may quote. `gross_yield_pct` 0 means no estimate (off-plan)."""
     off_plan = p["completionYear"] > 2026 or not p["roi"]
     return {
         "id": p["id"],
@@ -271,13 +271,22 @@ def search(
 
     if filters.get("sort") == "yield":
         rows, ranking = sorted(rows, key=lambda p: -p["roi"]), "yield"
-    return {
+    out: dict[str, Any] = {
         "filters": {k: v for k, v in filters.items() if k != "sort"},
         "relaxed": relaxed,
+        # 0 when filters were widened: these listings do NOT meet every criterion asked for
+        "exact_matches": 0 if relaxed else len(rows),
         "ranked_by": ranking,
         "total_matches": len(rows),
         "listings": [summary(p) for p in rows[:limit]],
     }
+    if relaxed:
+        out["note"] = (
+            "Nothing matched every criterion. These listings match after dropping: "
+            + ", ".join(relaxed)
+            + ". Say so, and describe each listing as it is (e.g. its real bedroom count)."
+        )
+    return out
 
 
 _STOP = set(
@@ -311,3 +320,41 @@ def hybrid_rank(text: str, semantic: dict[str, float] | None = None) -> list[dic
     scores = {i: semantic.get(i, 0.0) + KEYWORD_WEIGHT * kw.get(i, 0.0) for i in semantic}
     best = sorted(scores.items(), key=lambda t: -t[1])
     return [get(i) for i, sc in best if sc >= MIN_HYBRID_SCORE and get(i)]  # type: ignore[misc]
+
+
+# ── Lookups used by the agents' tools ────────────────────────────────────────
+
+
+def resolve(name_or_id: str | None) -> dict[str, Any] | None:
+    """A listing by id ("10"), link ("/property/10") or name ("DAMAC Islands")."""
+    if not name_or_id:
+        return None
+    key = str(name_or_id).strip().rsplit("/", 1)[-1]
+    if p := get(key):
+        return p
+    found = mentioned_listings(str(name_or_id))
+    if found:
+        return found[0]
+    low = str(name_or_id).lower()
+    return next((p for p in all_listings() if low and low in p["title"].lower()), None)
+
+
+def comparison(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Figures an agent would otherwise work out itself (and so not be grounded):
+    lowest/highest across the rows, and the gaps when exactly two are compared."""
+    if len(rows) < 2:
+        return None
+    by_price = sorted(rows, key=lambda r: r["price_aed"])
+    per_sqft = [r["price_per_sqft_aed"] for r in rows if r.get("price_per_sqft_aed")]
+    out: dict[str, Any] = {
+        "lowest_price": {"title": by_price[0]["title"], "price_aed": by_price[0]["price_aed"]},
+        "highest_price": {"title": by_price[-1]["title"], "price_aed": by_price[-1]["price_aed"]},
+        "price_per_sqft_aed": (
+            {"lowest": min(per_sqft), "highest": max(per_sqft)} if per_sqft else None
+        ),
+    }
+    if len(rows) == 2:
+        a, b = by_price
+        out["price_difference_aed"] = b["price_aed"] - a["price_aed"]
+        out["size_difference_sqft"] = abs(b["size_sqft"] - a["size_sqft"])
+    return out

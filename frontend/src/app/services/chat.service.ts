@@ -8,6 +8,29 @@ export interface ChatTurn {
   content: string;
 }
 
+// Memory keys (spec §7). The session is one chat window: a new one per page
+// load. The visitor id is random, stays in this browser, and lets the assistant
+// remember preferences (budget, areas) on a later visit. No login, no PII.
+const VISITOR_KEY = "dubainest.visitorId";
+
+function newId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function loadVisitorId(): string {
+  try {
+    const existing = localStorage.getItem(VISITOR_KEY);
+    if (existing && /^[A-Za-z0-9-]{8,64}$/.test(existing)) return existing;
+    const id = newId();
+    localStorage.setItem(VISITOR_KEY, id);
+    return id;
+  } catch {
+    return newId(); // storage blocked: remember for this page only
+  }
+}
+
 export interface PropertyIntro {
   intro: string;
   suggestions: string[];
@@ -16,6 +39,13 @@ export interface PropertyIntro {
 @Injectable({ providedIn: "root" })
 export class ChatService {
   private http = inject(HttpClient);
+  private sessionId = newId();
+  private visitorId = loadVisitorId();
+
+  /** Start a fresh conversation (the visitor's preferences are kept). */
+  newSession() {
+    this.sessionId = newId();
+  }
 
   isOpen = signal(false);
   // True once the user has opened/closed the chat themselves. Used to suppress
@@ -75,6 +105,8 @@ export class ChatService {
       prompt,
       property_id: propertyId ?? this.pendingPropertyId() ?? null,
       history: history ?? [],
+      session_id: this.sessionId,
+      visitor_id: this.visitorId,
     };
 
     try {

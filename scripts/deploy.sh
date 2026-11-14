@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
-# Deploy the api Lambda + the site (build step 5), then smoke-test it.
+# Deploy the agent, the api Lambda and the site, then smoke-test them.
 #
-#   scripts/deploy.sh             # ApiStack + FrontendStack, upload the UI, invalidate
-#   scripts/deploy.sh --infra     # stacks only
+#   scripts/deploy.sh             # everything below
+#   scripts/deploy.sh --agent     # AgentStack (AgentCore Runtime), upload the index, test a stream
+#   scripts/deploy.sh --infra     # ApiStack + FrontendStack only
 #   scripts/deploy.sh --site      # rebuild + upload the UI only
 #
-# Needs: AWS credentials for the account, Docker running (the api image is
-# built for arm64), Node 20+. The assets domain for photos is read from the
+# Needs: AWS credentials for the account, Docker running (the api and agent
+# images are built for arm64), Node 20+, the repo's .venv. The assets domain for photos is read from the
 # shared DubaiNestDataStack (owned by dubainest-ai), so nothing account-specific
 # lives in this repo.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REGION="${AWS_REGION:-us-east-1}"
+AGENT_STACK=DubaiNestAgentCoreAgentStack
 API_STACK=DubaiNestAgentCoreApiStack
 SITE_STACK=DubaiNestAgentCoreFrontendStack
 MODE="${1:-all}"
@@ -24,6 +26,28 @@ output() { # stack key
   aws cloudformation describe-stacks --region "$REGION" --stack-name "$1" \
     --query "Stacks[0].Outputs[?OutputKey=='$2'].OutputValue" --output text
 }
+
+PY="$ROOT/.venv/bin/python"
+
+if [[ "$MODE" == "all" || "$MODE" == "--agent" ]]; then
+  (cd "$ROOT/infra" && npx cdk deploy "$AGENT_STACK" --require-approval "$APPROVAL")
+  INDEX_URI="$(output "$AGENT_STACK" IndexUri)"
+  INDEX="$ROOT/data/listings_index.npz"
+  if [[ -f "$INDEX" ]]; then
+    aws s3 cp "$INDEX" "$INDEX_URI" --only-show-errors && echo "✓ index → $INDEX_URI"
+  else
+    "$PY" "$ROOT/scripts/build_index.py" --source dynamodb --upload "$INDEX_URI"
+  fi
+  # AgentCore creates the runtime's log group on first use, with no expiry:
+  # keep 7 days, like the api Lambda (best effort; it may not exist yet).
+  RID="$(output "$AGENT_STACK" AgentRuntimeId)"
+  aws logs put-retention-policy --region "$REGION" --retention-in-days 7 \
+    --log-group-name "/aws/bedrock-agentcore/runtimes/$RID-DEFAULT" 2>/dev/null || true
+  echo "→ test stream from AgentCore"
+  "$PY" "$ROOT/scripts/invoke_agent.py" --events "Which DAMAC projects are on the water?" | tail -4
+  aws logs put-retention-policy --region "$REGION" --retention-in-days 7 \
+    --log-group-name "/aws/bedrock-agentcore/runtimes/$RID-DEFAULT" 2>/dev/null || true
+fi
 
 if [[ "$MODE" == "all" || "$MODE" == "--infra" ]]; then
   ASSETS="$(output DubaiNestDataStack AssetsCloudFrontDomain)"
@@ -42,5 +66,6 @@ if [[ "$MODE" == "all" || "$MODE" == "--site" ]]; then
     --query 'Invalidation.Id' --output text
 fi
 
-URL="$(output "$SITE_STACK" CloudFrontDomain)"
-"$ROOT/scripts/smoke.sh" "$URL"
+if [[ "$MODE" != "--agent" ]]; then
+  "$ROOT/scripts/smoke.sh" "$(output "$SITE_STACK" CloudFrontDomain)"
+fi

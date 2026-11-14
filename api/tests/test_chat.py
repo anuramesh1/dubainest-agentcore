@@ -10,11 +10,13 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.store.memory import InMemoryStore
 
 import agent.stream
 from agent.graph import build_graph
-from agent.llm import Route
 from agent.prompts import SUGGESTIONS_MARKER
+from agent.tests.fakes import AgentFactory, fake_classify
 from agent.tools import listings, vector_index
 from api.app import app
 from api.chat_relay import MAX_PROMPT_CHARS, REFUSAL
@@ -25,6 +27,12 @@ ANSWER = (
 )
 
 
+class Calls(list):
+    """The router's inputs, plus the fake agent factory (what each agent was given)."""
+
+    factory: AgentFactory
+
+
 @pytest.fixture()
 def calls(monkeypatch, tmp_path):
     """Swap in a graph with fake router/writer; record what the agent was asked."""
@@ -33,27 +41,23 @@ def calls(monkeypatch, tmp_path):
     monkeypatch.delenv("AGENT_MODE", raising=False)
     listings.all_listings.cache_clear()
     vector_index.load.cache_clear()
-    seen: list[str] = []
-
-    async def classify(system, user):
-        seen.append(user)
-        return Route(intent="property_search", confidence=0.9), {"model": "fake"}
-
-    async def stream_text(system, user, trace):
-        for i in range(0, len(ANSWER), 9):
-            yield ANSWER[i : i + 9]
-        trace.update(model="fake")
-
-    monkeypatch.setattr(agent.stream, "default_graph", lambda: build_graph(classify, stream_text))
+    seen = Calls()
+    factory = AgentFactory([("tool", "search_listings", {"query": "Burj Vista"}), ("text", ANSWER)])
+    g = build_graph(
+        fake_classify("property_search", calls=seen),
+        factory,
+        checkpointer=InMemorySaver(),
+        store=InMemoryStore(),
+    )
+    monkeypatch.setattr(agent.stream, "default_graph", lambda: g)
+    seen.factory = factory
     yield seen
     listings.all_listings.cache_clear()
 
 
 def post(body: dict) -> tuple[int, str, list[dict]]:
     r = TestClient(app).post("/api/chat", json=body)
-    events = [
-        json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")
-    ]
+    events = [json.loads(line[6:]) for line in r.text.splitlines() if line.startswith("data: ")]
     return r.status_code, r.headers.get("content-type", ""), events
 
 
@@ -63,6 +67,7 @@ def test_sse_contract(calls):
     assert status == 200 and ctype.startswith("text/event-stream")
     kinds = [e["event_type"] for e in events]
     assert kinds[0] == "status" and events[0]["content"] == "Thinking..."
+    assert events[1]["content"] == "Searching listings…"  # a tool call shows as status
     assert kinds[-1] == "done"
     assert set(kinds) <= {"status", "chunk", "suggestions", "done", "error"}
     assert kinds.count("suggestions") == 1 and kinds.index("suggestions") > kinds.index("chunk")
@@ -105,6 +110,14 @@ def test_long_prompt_is_cut_not_rejected(calls):
     assert len(question) <= MAX_PROMPT_CHARS
 
 
+def test_session_continues_the_conversation(calls):
+    ids = {"session_id": "3f2a9c1e-0b7d-4c55-9e1a-6d2f8b4a7c10", "visitor_id": "visitor-1234"}
+    post({"prompt": "Show me Burj Vista", **ids})
+    post({"prompt": "and its yield?", **ids})  # no history sent: the server remembers
+    msgs = calls.factory.made[1].messages
+    assert msgs[0]["content"][0]["text"] == "Show me Burj Vista"
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -112,6 +125,8 @@ def test_long_prompt_is_cut_not_rejected(calls):
         {"prompt": "   "},
         {"prompt": "hi", "history": [{"role": "system", "content": "x"}]},
         {"prompt": "hi", "property_id": "x" * 50},
+        {"prompt": "hi", "session_id": "bad id with spaces"},
+        {"prompt": "hi", "visitor_id": "x"},
     ],
 )
 def test_bad_requests_are_422(calls, body):

@@ -19,12 +19,17 @@ def router_model_id() -> str:
 
 
 def writer_model_id() -> str:
-    """Answer model (spec §13 decision 2). Sonnet is a config switch."""
+    """The Strands agents' model (spec §13 decision 2). Sonnet is a config switch."""
     return os.getenv("WRITER_MODEL_ID", "us.anthropic.claude-haiku-4-5-20251001-v1:0")
 
 
 def writer_max_tokens() -> int:
     return int(os.getenv("WRITER_MAX_TOKENS", "600"))
+
+
+def agent_max_turns() -> int:
+    """Model calls one Strands agent may make per question (tool rounds + answer)."""
+    return int(os.getenv("AGENT_MAX_TURNS", "4"))
 
 
 def router_min_confidence() -> float:
@@ -43,3 +48,13 @@ def properties_table() -> str:
 
 def leads_table() -> str:
     return os.getenv("DYNAMODB_LEADS_TABLE", "dubainest-leads-dev")
+
+
+def sessions_table() -> str | None:
+    """Conversation memory (LangGraph checkpointer). Unset: in-process memory."""
+    return os.getenv("SESSIONS_TABLE") or None
+
+
+def memory_table() -> str | None:
+    """Long-term visitor memory (LangGraph store). Unset: in-process memory."""
+    return os.getenv("MEMORY_TABLE") or None

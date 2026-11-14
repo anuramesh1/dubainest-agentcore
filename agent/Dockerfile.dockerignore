@@ -1,0 +1,7 @@
+# Used by `docker build -f agent/Dockerfile .` (BuildKit) — only what the image needs.
+*
+!agent/
+!data/area_stats.json
+**/__pycache__
+**/*.pyc
+agent/tests/

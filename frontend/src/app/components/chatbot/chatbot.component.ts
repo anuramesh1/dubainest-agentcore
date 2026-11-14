@@ -273,6 +273,9 @@ export class ChatbotComponent {
 
     this.messages.update((msgs) => [...msgs, tempMessage]);
     const placeholderIndex = this.messages().length - 1;
+    // Status events ("Searching listings…") replace the placeholder text until the
+    // answer starts; after that they must not overwrite it.
+    let answerStarted = false;
 
     await this.chatService.streamChat(
       text,
@@ -302,6 +305,7 @@ export class ChatbotComponent {
 
         // "status" — update placeholder text in-place ("Thinking...")
         if (evType === "status") {
+          if (answerStarted) return;
           this.messages.update((msgs) => {
             const updated = [...msgs];
             if (updated[placeholderIndex]) {
@@ -322,8 +326,8 @@ export class ChatbotComponent {
             const updated = [...msgs];
             if (updated[placeholderIndex]) {
               const prev = updated[placeholderIndex].content;
-              // Clear "Thinking..." on the very first chunk
-              const base = prev === "Thinking..." ? "" : prev;
+              // The first chunk replaces whatever status text was showing
+              const base = answerStarted ? prev : "";
               updated[placeholderIndex] = {
                 ...updated[placeholderIndex],
                 content: base + content,
@@ -331,6 +335,7 @@ export class ChatbotComponent {
             }
             return updated;
           });
+          answerStarted = true;
           this.scrollToBottom();
           return;
         }

@@ -59,10 +59,17 @@ class ChatTurn(BaseModel):
         return v[:MAX_TURN_CHARS]
 
 
+# Browser-made ids (crypto.randomUUID()): letters, digits and dashes only.
+_ID = r"^[A-Za-z0-9-]{8,64}$"
+
+
 class ChatRequest(BaseModel):
     prompt: str = Field(min_length=1)
     property_id: str | None = Field(default=None, max_length=20)
     history: list[ChatTurn] = Field(default_factory=list)
+    # Conversation memory (one per chat window) and long-term memory (one per browser).
+    session_id: str | None = Field(default=None, pattern=_ID)
+    visitor_id: str | None = Field(default=None, pattern=_ID)
 
     @field_validator("prompt")
     @classmethod
@@ -124,6 +131,8 @@ async def chat(body: ChatRequest) -> StreamingResponse:
                 "prompt": prompt,
                 "property_id": body.property_id,
                 "history": [t.model_dump() for t in body.history],
+                "session_id": body.session_id,
+                "visitor_id": body.visitor_id,
             }
         )
     return StreamingResponse(

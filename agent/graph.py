@@ -1,41 +1,47 @@
-"""Build and compile the StateGraph (spec §5).
+"""Build and compile the StateGraph (spec §5): LangGraph orchestrates, Strands agents answer.
 
-    START → router ─┬→ property_search ─┐
-                    ├→ market_intel ────┤
-                    ├→ roi ─────────────┼→ writer → END
-                    ├→ scheduler ───────┤
-                    ├→ general ─────────┘
-                    └→ off_topic → END
+    START → load_memory → router ─┬→ property_agent ─┐
+                                  ├→ market_agent ───┤
+                                  ├→ roi_agent ──────┤
+                                  ├→ viewing_agent ──┼→ remember → END
+                                  ├→ general_agent ──┤
+                                  ├→ confirm_viewing ┤   (no model)
+                                  └→ off_topic ──────┘   (no model)
 
-The router may return two specialists; LangGraph runs them in parallel and the
-writer runs once after both. No checkpointer: each call is stateless; the
-browser sends the history (spec §7).
+Each *_agent node runs one Strands agent with its tools, streaming through the
+output gate (agent/specialists/). Two intents give one agent both toolsets.
+Compiled with a checkpointer (conversation memory per chat session) and a
+store (long-term memory per visitor): DynamoDB on AWS, in-process otherwise.
 """
 
 from __future__ import annotations
 
 from functools import partial
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
+from langgraph.store.base import BaseStore
 
-from . import config, llm
+from . import config, llm, memory
 from .nodes import router as router_mod
-from .nodes import specialists
-from .nodes.writer import off_topic, writer
+from .nodes.fixed import confirm_viewing, off_topic
+from .nodes.memory_nodes import load_memory, remember
+from .specialists import agents
 from .state import AgentState
 
-SPECIALIST_NODES = {
-    "property_search": specialists.property_search,
-    "market_intel": specialists.market_intel,
-    "roi": specialists.roi,
-    "scheduler": specialists.scheduler,
-    "general": specialists.general,
-}
+AGENT_NODES = tuple(dict.fromkeys(router_mod.AGENT_NODES.values()))
 
 
-def build_graph(classify=None, stream_text=None):
-    """`classify` / `stream_text` default to Bedrock (agent/llm.py); tests pass fakes."""
+def build_graph(
+    classify=None,
+    make_agent=None,
+    checkpointer: BaseCheckpointSaver | None = None,
+    store: BaseStore | None = None,
+):
+    """`classify` (router) and `make_agent` (Strands) default to Bedrock; tests pass
+    fakes. `checkpointer` / `store` default to agent/memory.py's choice."""
     g = StateGraph(AgentState)
+    g.add_node("load_memory", load_memory)
     g.add_node(
         "router",
         partial(
@@ -44,14 +50,24 @@ def build_graph(classify=None, stream_text=None):
             min_confidence=config.router_min_confidence(),
         ),
     )
-    for name, fn in SPECIALIST_NODES.items():
-        g.add_node(name, fn)
-        g.add_edge(name, "writer")
-    g.add_node("writer", partial(writer, stream_text=stream_text or llm.stream_text))
+    for name in AGENT_NODES:
+        g.add_node(
+            name, partial(agents.run_specialist, make=make_agent or agents.make_agent, node=name)
+        )
+        g.add_edge(name, "remember")
+    g.add_node("confirm_viewing", confirm_viewing)
     g.add_node("off_topic", off_topic)
+    g.add_node("remember", remember)
 
-    g.add_edge(START, "router")
-    g.add_conditional_edges("router", router_mod.next_nodes, [*SPECIALIST_NODES, "off_topic"])
-    g.add_edge("writer", END)
-    g.add_edge("off_topic", END)
-    return g.compile()
+    g.add_edge(START, "load_memory")
+    g.add_edge("load_memory", "router")
+    g.add_conditional_edges(
+        "router", router_mod.next_node, [*AGENT_NODES, "confirm_viewing", "off_topic"]
+    )
+    g.add_edge("confirm_viewing", "remember")
+    g.add_edge("off_topic", "remember")
+    g.add_edge("remember", END)
+    return g.compile(
+        checkpointer=checkpointer if checkpointer is not None else memory.checkpointer(),
+        store=store if store is not None else memory.store(),
+    )

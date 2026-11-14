@@ -17,12 +17,19 @@ _MULT = {"bn": 1e9, "billion": 1e9, "m": 1e6, "mn": 1e6, "million": 1e6, "k": 1e
 
 
 def _value(num: str, unit: str | None) -> tuple[float, float]:
-    """(amount, tolerance). Abbreviations ('1.85M') may round to their last digit."""
+    """(amount, tolerance). A figure may be rounded to the precision it is written in:
+    '1.85M' to the nearest 10,000, '1,630' to the nearest 10 (so it matches 1,632).
+    The rounding allowance is capped at 3% of the amount, so 'AED 2M' only matches
+    1.94M-2.06M, not anything that rounds to 2M."""
     mult = _MULT.get((unit or "").lower(), 1.0)
     clean = num.replace(",", "")
-    decimals = len(clean.split(".")[1]) if "." in clean else 0
+    if "." in clean:
+        precision = 0.5 * 10 ** -len(clean.split(".")[1])
+    else:
+        zeros = len(clean) - len(clean.rstrip("0"))
+        precision = 0.5 * 10**zeros if zeros else 0.5
     amount = float(clean) * mult
-    tol = 0.5 if mult == 1 else max(0.5 * 10 ** (-decimals) * mult, amount * 0.005)
+    tol = max(0.5, min(precision * mult, amount * 0.03))
     return amount, tol
 
 

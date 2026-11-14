@@ -1,6 +1,14 @@
 # DubaiNest AgentCore
 
-The DubaiNest AI real-estate chatbot, rebuilt to cost almost nothing while idle: a LangGraph agent graph on Amazon Bedrock AgentCore Runtime behind a Lambda Function URL, in place of the Fargate, ALB and NAT stack of [`dubainest-ai`](../dubainest-ai).
+The DubaiNest AI real-estate chatbot, rebuilt to cost almost nothing while idle. **LangGraph orchestrates Strands agents** on Amazon Bedrock AgentCore Runtime, with conversation and long-term memory in DynamoDB, behind a Lambda Function URL. It replaces the Fargate, ALB and NAT stack of [`dubainest-ai`](../dubainest-ai).
+
+| Layer | Technology |
+| --- | --- |
+| Compute (API, guardrails, relay) | AWS Lambda (Function URL, response streaming) behind CloudFront |
+| Orchestration: routing, state, guardrails, memory | LangGraph |
+| Agents | Strands Agents (one per specialist, Claude Haiku 4.5 on Bedrock) |
+| Agent hosting | Amazon Bedrock AgentCore Runtime |
+| Memory | DynamoDB: LangGraph checkpointer (conversation) + store (visitor profile) |
 
 The design is in [`docs/00-spec.md`](docs/00-spec.md). This repo is built step by step following its §11.
 
@@ -10,11 +18,11 @@ The design is in [`docs/00-spec.md`](docs/00-spec.md). This repo is built step b
 | --- | --- | --- |
 | 1 | Copy of `dubainest-ai`, `git init`, VPC / ALB / ECS removed | ✅ done |
 | 2 | `api/`: properties, facets, enquiries, property-intro | ✅ done |
-| 3 | `agent/` LangGraph graph, run in-process | ✅ done |
+| 3 | `agent/`: LangGraph graph with Strands agents, output gate, memory (rebuilt after step 5) | ✅ done |
 | 4 | Chat relay (local) + `scripts/build_index.py` | ✅ done |
 | 5 | CDK: api Lambda + Function URL behind CloudFront | ✅ done |
-| 6 | AgentCore Runtime | next |
-| 7 | Relay wired to AgentCore, caps, budget | |
+| 6 | AgentCore Runtime (Strands agents + DynamoDB memory) | ✅ done |
+| 7 | Relay wired to AgentCore, caps, budget | next |
 | 8 | Destroy the old backend stacks, 7-day cost check | |
 
 ## Layout (now)
@@ -23,15 +31,13 @@ The design is in [`docs/00-spec.md`](docs/00-spec.md). This repo is built step b
 dubainest-agentcore/
 ├── frontend/   # Angular 17 + Tailwind, copied from dubainest-ai (build warnings fixed)
 ├── api/        # FastAPI: listings, enquiries, property-intro, chat relay (+ tests, Dockerfile)
-├── agent/      # LangGraph StateGraph: router → specialist(s) → writer (+ tests)
-├── evals/      # Bedrock evals: routing, grounding, cost (spec §10)
+├── agent/      # LangGraph graph + Strands agents (specialists/), memory, AgentCore entrypoint (+ tests)
+├── evals/      # Bedrock evals: routing, grounding, cost, memory (spec §10)
 ├── data/       # mock_properties.py (20 listings: DAMAC 7, Emaar 8, Nakheel 5), area_stats.json
-├── infra/      # CDK (TypeScript): ApiStack, FrontendStack, ObservabilityStack
-├── scripts/    # seed_properties.py, build_index.py, upload_photos.sh, deploy.sh, smoke.sh
+├── infra/      # CDK (TypeScript): AgentStack, ApiStack, FrontendStack, ObservabilityStack
+├── scripts/    # seed_properties.py, build_index.py, upload_photos.sh, deploy.sh, smoke.sh, invoke_agent.py
 └── docs/       # 00-spec.md, architecture.png; legacy/ holds the dubainest-ai docs
 ```
-
-`agent/main.py` and `agent/Dockerfile` come with AgentCore in step 6.
 
 ## What step 1 removed, and why
 
@@ -78,41 +84,53 @@ Open http://localhost:4200 and use the chat: it calls `POST /api/chat`, which ru
 | `GET /api/chat/property-intro/{id}` | templated from the listing, no model call |
 | `POST /api/chat` (prompt, property_id, history) | guard_in (injection screen, 2,000-char cap), then the agent's SSE events, relayed unchanged |
 
-## The agent (step 3)
+## The agent: LangGraph orchestrates, Strands agents answer
 
 ```
-START → router ─┬→ property_search ─┐
-   (Nova Micro) ├→ market_intel ────┤
-                ├→ roi ─────────────┼→ writer → END
-                ├→ scheduler ───────┤  (Claude Haiku 4.5, streams)
-                ├→ general ─────────┘
-                └→ off_topic → END     (fixed reply, no model call)
+START → load_memory → router ─┬→ property_agent ─┐
+          (store)   (Nova Micro)├→ market_agent ───┤   Strands agents (Claude Haiku 4.5):
+                              ├→ roi_agent ──────┤   tools + output gate
+                              ├→ viewing_agent ──┼→ remember → END
+                              ├→ general_agent ──┤     (store + checkpointer)
+                              ├→ confirm_viewing ┤   no model: "yes" saves the lead
+                              └→ off_topic ──────┘   no model: fixed reply
 ```
 
-- **router** ([agent/nodes/router.py](agent/nodes/router.py)): one Nova Micro call with structured output (`intent`, `second_intent`, `confidence`). Below 0.6 confidence, or if the call fails, the keyword router from dubainest-ai decides. A "yes" right after a viewing confirmation goes straight to the scheduler with no model call. Two intents fan out in parallel only for search + ROI, search + market or market + ROI.
-- **specialists** ([agent/nodes/specialists.py](agent/nodes/specialists.py)): plain Python, no model calls. Search parses filters from the question (area, developer, type, bedrooms, price) and widens them, saying so, when nothing matches. ROI computes yield, service charges, mortgage, cash flow and payback from the listing and stated assumptions (75% LTV, 4.5% over 25 years, AED 18/sqft service charge, 4% DLD fee). The scheduler collects property, time, name and contact across turns and writes to Leads only after the user replies yes to the confirmation.
-- **writer** ([agent/nodes/writer.py](agent/nodes/writer.py)): one Claude Haiku 4.5 call that sees only `facts`, streams the answer, and ends with suggestions that become the UI's `suggestions` event. A post-check flags any AED figure not in `facts` ([agent/grounding.py](agent/grounding.py)).
-- **search ranking**: with filters (area, price, bedrooms…) results are filtered and sorted by price. A descriptive question with no filters ("beach and lagoons for my family") is ranked by hybrid score: Titan v2 vector similarity from `data/listings_index.npz` plus 0.3 × keyword overlap. Without the index it falls back to keywords only. Built by [scripts/build_index.py](scripts/build_index.py); one query embedding per such question.
-- **events** ([agent/stream.py](agent/stream.py)): `status` → `chunk`… → `suggestions` → `done`, or `error` with a safe message, the exact shapes `chat.service.ts` parses.
+- **LangGraph** ([agent/graph.py](agent/graph.py)) owns the control flow: memory in and out, routing, which agent answers, the viewing confirmation and the off-topic reply.
+- **router** ([agent/nodes/router.py](agent/nodes/router.py)): one Nova Micro call with structured output (`intent`, `second_intent`, `confidence`), the keyword router below 0.6 confidence or on error. A yes/no to a pending viewing goes straight to `confirm_viewing` with no model call. Search+ROI, search+market and market+ROI questions give one agent both toolsets.
+- **Strands agents** ([agent/specialists/](agent/specialists/)): a fresh `strands.Agent` per question with the conversation as its messages and only its specialist's tools ([tools.py](agent/specialists/tools.py)):
 
-Market figures in [data/area_stats.json](data/area_stats.json) are the notes carried over from dubainest-ai (June 2026) and are marked unverified; the writer quotes their date. Refreshing them from DLD open data is still to do.
+  | Agent | Tools |
+  | --- | --- |
+  | property | `search_listings` (filters + hybrid vector/keyword ranking), `get_listing`, `compare_listings` |
+  | market | `area_market`, `get_listing` |
+  | roi | `calculate_roi` (deterministic yield, mortgage, cash flow, payback), `search_listings`, `get_listing` |
+  | viewing | `request_viewing` (checks details against what the visitor typed; holds the request until "yes"), `get_listing` |
+  | general | `catalogue_overview`, `get_listing` |
+
+- **Output gate** ([agent/specialists/gate.py](agent/specialists/gate.py)): narration before tool calls is dropped and replaced by `status` events ("Searching listings…"); the answer streams sentence by sentence, each checked first: every AED figure must come from this turn's tool results, earlier (already checked) answers or the visitor's words. A failing sentence is never sent; the stream stops with a safe line and the agent is cancelled.
+- **Memory** ([agent/memory.py](agent/memory.py), [nodes/memory_nodes.py](agent/nodes/memory_nodes.py)): conversation per chat session through LangGraph's checkpointer (`DynamoDBSaver`, 24 h), visitor profile through LangGraph's store (`DynamoDBStore`, 90 days): budget, areas, bedrooms, types, purpose, first name, listings seen. Extracted by code, never email or phone. In-process `InMemorySaver` / `InMemoryStore` when `SESSIONS_TABLE` / `MEMORY_TABLE` are unset.
+- **Events** ([agent/stream.py](agent/stream.py)): `status` → `chunk`… → `suggestions` → `done`, or `error` with a safe message: unchanged for the UI.
+
+Market figures in [data/area_stats.json](data/area_stats.json) are the notes carried over from dubainest-ai (June 2026) and are marked unverified; agents quote their date.
 
 ```bash
-# ask a question in-process (Bedrock calls; listings from DynamoDB, or LISTINGS_SOURCE=seed)
+# in-process (Bedrock calls; listings from DynamoDB, or LISTINGS_SOURCE=seed)
 .venv/bin/python -m agent.cli "2 bed apartments under 3M"
 .venv/bin/python -m agent.cli --property 10 --trace "What's the expected ROI?"
+.venv/bin/python -m agent.cli --chat          # a conversation; /new starts a session, same visitor
 
-# evals against Bedrock (about 80 model calls, a few cents; leads are not written)
-.venv/bin/python -m evals            # routing ≥ 90%, grounding 20/20, ≤ 2 model calls on 95%
-.venv/bin/python -m evals grounding -v
+# evals against Bedrock (about 130 model calls, a few cents; leads are not written)
+.venv/bin/python -m evals            # routing ≥ 90%, grounding 20/20, ≤ 4 calls on 95%, memory 5/5
+.venv/bin/python -m evals memory -v
 ```
 
-Last run (3 consecutive): routing 40/40, grounding 20/20, every question in 2 model calls or fewer, about 2,900 input / 270 output tokens and **$0.0033 per question**, 2.5 s average.
+Last run: routing 40/40, grounding 20/20 (output gate blocked nothing), every question in 4 model calls or fewer (median 3), about 5,850 input / 340 output tokens and **$0.0066 per question**, 3.3 s average; memory 5/5 (a follow-up with no browser history, a viewing confirmed by "yes", the budget recalled in a new session).
 
 ## Tests and checks
 
 ```bash
-.venv/bin/pytest -q                         # api (fake DynamoDB), chat SSE contract, agent (fake models); no AWS
+.venv/bin/pytest -q                         # api, chat SSE contract, agent with a fake Strands agent, memory on moto DynamoDB; no AWS
 .venv/bin/ruff check api agent evals scripts data
 cd frontend && npm run build
 cd infra && npx cdk synth
@@ -137,6 +155,27 @@ browser ─▶ CloudFront ─┬─ /*      ─▶ S3 (Angular build)
 scripts/deploy.sh            # needs Docker running (REQUIRE_APPROVAL=never skips CDK's IAM prompt when there's no terminal): cdk deploy Api + Frontend stacks, upload UI, invalidate, smoke test
 scripts/deploy.sh --site     # UI only
 scripts/smoke.sh https://<distribution>.cloudfront.net   # read-only checks
+```
+
+## The agent on AgentCore Runtime (step 6)
+
+- **Entrypoint** ([agent/main.py](agent/main.py)): `BedrockAgentCoreApp` with an async-generator entrypoint, so the SDK streams each event as a `data: {json}` SSE line, the same events the UI parses. AgentCore calls `POST /invocations` and `GET /ping` on port 8080.
+- **Image** ([agent/Dockerfile](agent/Dockerfile)): arm64, Python 3.12, LangGraph + Strands, just `agent/` and `data/area_stats.json` (~510 MB). CDK builds it and pushes it to the CDK assets ECR repository.
+- **Stack** ([infra/lib/agent-stack.ts](infra/lib/agent-stack.ts)): `AWS::BedrockAgentCore::Runtime` in PUBLIC network mode (no VPC, no NAT). Sessions end after 5 idle minutes (1 hour max). Listings come from the Properties table (one Scan per microVM); the vector index from a private S3 bucket (`INDEX_URI`).
+- **Memory tables**: `dubainest-agentcore-sessions-<env>` (checkpointer, TTL `ttl`) and `dubainest-agentcore-memory-<env>` (store, TTL `expires_at`), on demand.
+- **Role**: invoke Nova Micro, Claude Haiku 4.5 and Titan v2 only; Scan Properties; PutItem Leads (confirmed viewings); read the index object; read/write its two memory tables; logs and traces.
+- **Measured** (warm): `status` at ~0.7 s, the tool's status at ~2 s, first answer text at ~3 s, done at ~4–5 s. The first call after idle (new microVM, imports, Scan, index load) took ~10 s to first text.
+- **Read the stream unbuffered.** boto3's `StreamingBody.iter_lines()` reads 1 KB blocks and makes a short answer arrive all at once; [invoke_agent.py](scripts/invoke_agent.py) reads with `read1()`, and the step 7 relay must too.
+- **Not yet wired to the site.** The api Lambda starts relaying to the runtime in step 7.
+
+```bash
+scripts/deploy.sh --agent                       # deploy, upload the index, stream one test question
+.venv/bin/python scripts/invoke_agent.py "2 bed apartments under 3M"           # streams from AgentCore
+.venv/bin/python scripts/invoke_agent.py --events --property 10 "Expected ROI?"   # raw events + timings
+
+# the same container locally (port 8080)
+docker buildx build --platform linux/arm64 -f agent/Dockerfile -t dubainest-agent .
+.venv/bin/python -m agent.main                 # or run the entrypoint without Docker
 ```
 
 ## Data

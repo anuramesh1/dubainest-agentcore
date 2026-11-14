@@ -1,13 +1,11 @@
-"""The only two places the graph calls a model: the router and the writer.
-
-Both go through langchain-aws (ChatBedrockConverse) to Amazon Bedrock. Tests
-pass fakes with the same shapes to build_graph(), so they need no AWS.
+"""The router's model call: Nova Micro with structured output, through
+langchain-aws (ChatBedrockConverse). The Strands agents' model lives in
+agent/specialists/agents.py. Tests pass fakes to build_graph(), so they need no AWS.
 """
 
 from __future__ import annotations
 
 import time
-from collections.abc import AsyncIterator
 from functools import lru_cache
 from typing import Any
 
@@ -60,18 +58,3 @@ async def classify(system: str, user: str) -> tuple[Route, dict[str, Any]]:
         "ms": round((time.perf_counter() - t0) * 1000),
         **_usage(out["raw"]),
     }
-
-
-async def stream_text(system: str, user: str, trace: dict[str, Any]) -> AsyncIterator[str]:
-    """Writer call: streams text deltas; fills `trace` with model, tokens and time at the end."""
-    model_id = config.writer_model_id()
-    llm = _model(model_id, config.writer_max_tokens(), 0.3)
-    t0 = time.perf_counter()
-    usage = {"input_tokens": 0, "output_tokens": 0}
-    async for chunk in llm.astream([SystemMessage(system), HumanMessage(user)]):
-        for k, v in _usage(chunk).items():
-            usage[k] += v
-        text = chunk.text if isinstance(chunk.text, str) else chunk.text()
-        if text:
-            yield text
-    trace.update(model=model_id, ms=round((time.perf_counter() - t0) * 1000), **usage)

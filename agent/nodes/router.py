@@ -1,15 +1,16 @@
-"""router: one Nova Micro call → 1-2 intents. Keyword router when unsure or on error."""
+"""router: one Nova Micro call → 1-2 intents → which node answers. Keyword router
+when unsure or on error. A yes/no to a pending viewing request skips the model."""
 
 from __future__ import annotations
 
 import logging
-import re
 from typing import Any, cast
 
 from ..prompts import CONFIRM_PHRASE, ROUTER_SYSTEM
 from ..state import AgentState, Intent
 from ..tools import listings
 from .common import AFFIRMATIVE, context_text, last
+from .fixed import NEGATIVE
 
 log = logging.getLogger(__name__)
 
@@ -125,34 +126,50 @@ def _router_user_message(state: AgentState) -> str:
     return "\n".join(parts)
 
 
+# The node that answers each intent (Strands agents, spec §5).
+AGENT_NODES: dict[str, str] = {
+    "property_search": "property_agent",
+    "market_intel": "market_agent",
+    "roi": "roi_agent",
+    "scheduler": "viewing_agent",
+    "general": "general_agent",
+}
+
+
+def _routed(update: dict[str, Any], intents: list[Intent], entry: dict[str, Any]) -> dict[str, Any]:
+    route = "off_topic" if "off_topic" in intents else AGENT_NODES.get(intents[0], "general_agent")
+    return {**update, "intents": intents, "route": route, "trace": [entry]}
+
+
 async def router(state: AgentState, *, classify, min_confidence: float) -> dict[str, Any]:
     prompt = state["prompt"]
-    open_listing = listings.get(state.get("property_id"))
-    update: dict[str, Any] = {
-        "property_context": listings.summary(open_listing) if open_listing else None
-    }
+    update: dict[str, Any] = {}
+    if "property_context" not in state:  # set by load_memory; the routing eval calls us directly
+        open_listing = listings.get(state.get("property_id"))
+        update["property_context"] = listings.summary(open_listing) if open_listing else None
     state = cast(AgentState, {**state, **update})
 
-    # A "yes" right after the viewing confirmation is always the scheduler (no model call).
-    if CONFIRM_PHRASE in last(state, "assistant") and AFFIRMATIVE.match(prompt):
+    # Yes / no to a viewing request held in conversation memory: no model call.
+    if state.get("pending_viewing") and (AFFIRMATIVE.match(prompt) or NEGATIVE.match(prompt)):
         return {
             **update,
             "intents": ["scheduler"],
+            "route": "confirm_viewing",
             "trace": [{"node": "router", "rule": "viewing_confirmation"}],
         }
+    # "yes" after a confirmation we no longer hold (e.g. the session expired): ask again.
+    if CONFIRM_PHRASE in last(state, "assistant") and AFFIRMATIVE.match(prompt):
+        return _routed(
+            update, ["scheduler"], {"node": "router", "rule": "confirmation_without_pending"}
+        )
 
     try:
         route, call = await classify(ROUTER_SYSTEM, _router_user_message(state))
     except Exception as exc:  # noqa: BLE001 — any model failure falls back to keywords
         log.warning("router model failed, using keywords: %s", exc)
         intent = keyword_route(context_text(state))
-        return {
-            **update,
-            "intents": [intent],
-            "trace": [
-                {"node": "router", "rule": "keywords_after_error", "error": type(exc).__name__}
-            ],
-        }
+        entry = {"node": "router", "rule": "keywords_after_error", "error": type(exc).__name__}
+        return _routed(update, [intent], entry)
 
     entry = {
         "node": "router",
@@ -164,19 +181,16 @@ async def router(state: AgentState, *, classify, min_confidence: float) -> dict[
     if route.confidence < min_confidence and route.intent != "off_topic":
         intent = keyword_route(context_text(state))
         entry["rule"] = f"keywords_low_confidence→{intent}"
-        return {**update, "intents": [intent], "trace": [entry]}
+        return _routed(update, [intent], entry)
 
     intents: list[Intent] = [route.intent]
     if frozenset((route.intent, route.second_intent)) in _PAIRS:
         intents.append(route.second_intent)  # type: ignore[arg-type]
     elif route.second_intent and route.second_intent != route.intent:
         entry["dropped_second_intent"] = route.second_intent
-    return {**update, "intents": intents, "trace": [entry]}
+    return _routed(update, intents, entry)
 
 
-def next_nodes(state: AgentState) -> list[str]:
-    """Conditional edge: off_topic ends the graph; everything else goes to its specialist(s)."""
-    intents = state.get("intents") or ["general"]
-    if "off_topic" in intents:
-        return ["off_topic"]
-    return [i for i in intents if re.fullmatch(r"[a-z_]+", i)]
+def next_node(state: AgentState) -> str:
+    """Conditional edge: the node the router chose."""
+    return state.get("route") or "general_agent"

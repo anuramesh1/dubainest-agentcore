@@ -115,3 +115,63 @@ GROUNDING: list[Case] = [
         ),
     ),
 ]
+
+
+# ── Memory: one visitor, two sessions, no browser history (spec §7) ──────────
+
+
+def _search_filter(r: dict, key: str):
+    for res in r["facts"].get("search_listings", []):
+        if res.get("filters", {}).get(key) is not None:
+            return res["filters"][key]
+    return None
+
+
+MEMORY: list[dict] = [
+    {
+        "session": "A",
+        "prompt": "Hi, I'm Sara. I'm looking for a 2 bedroom apartment in Business Bay "
+        "under 3M to invest",
+        "check": lambda r: (
+            r["profile"].get("budget_max_aed") == 3_000_000
+            and r["profile"].get("first_name") == "Sara",
+            f"profile={ {k: v for k, v in r['profile'].items() if k != 'updated_at'} }",
+        ),
+    },
+    {
+        "session": "A",
+        "prompt": "What's the ROI on that one?",
+        # "that one" only makes sense with the previous turn (DAMAC Prive, id 17).
+        "check": lambda r: (
+            any(
+                x.get("listing", {}).get("id") == "17" for x in r["facts"].get("calculate_roi", [])
+            ),
+            f"tools={r['tools']} → calculate_roi on "
+            f"{[x.get('listing', {}).get('title') for x in r['facts'].get('calculate_roi', [])]}",
+        ),
+    },
+    {
+        "session": "A",
+        "prompt": "I'd like to view it on Saturday at 11am. My email is sara@example.com",
+        "check": lambda r: (
+            bool(r["pending_viewing"]) and r["leads_saved"] == 0,
+            f"pending={bool(r['pending_viewing'])} leads={r['leads_saved']}",
+        ),
+    },
+    {
+        "session": "A",
+        "prompt": "yes",
+        "check": lambda r: (
+            r["route"] == "confirm_viewing" and r["leads_saved"] == 1 and r["model_calls"] == 0,
+            f"leads={r['leads_saved']} model_calls={r['model_calls']}",
+        ),
+    },
+    {
+        "session": "B",
+        "prompt": "Anything in my budget?",
+        "check": lambda r: (
+            _search_filter(r, "max_price") == 3_000_000,
+            f"search max_price={_search_filter(r, 'max_price')} (from the profile)",
+        ),
+    },
+]

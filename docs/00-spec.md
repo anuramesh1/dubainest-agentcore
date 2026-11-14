@@ -61,77 +61,114 @@ A question wakes three things in order (CloudFront, the api Lambda, then AgentCo
 1. The browser POSTs `/api/chat` to the same CloudFront domain as today.
 2. CloudFront forwards `/api/*` to the api Lambda's Function URL (origin access control, `RESPONSE_STREAM` mode). Non-chat routes are answered there from DynamoDB.
 3. For chat, the Lambda runs guard_in and the caps, then calls `InvokeAgentRuntime` with a fresh `runtimeSessionId` per chat window.
-4. AgentCore runs the LangGraph graph: router, one specialist, writer. It reads listings and stats and calls Bedrock.
+4. AgentCore runs the LangGraph graph: memory, router, one Strands agent with its tools, the output gate. It reads listings, stats and memory and calls Bedrock.
 5. The agent streams the UI's SSE events back; the Lambda relays them unchanged to the browser.
 
-Region: us-east-1. AgentCore runs in public network mode, so no VPC or NAT gateway is needed. Its IAM role allows only Bedrock invoke on the two models, read on the data bucket and the Properties table, and write on the Leads table.
+Region: us-east-1. AgentCore runs in public network mode, so no VPC or NAT gateway is needed. Its IAM role allows only Bedrock invoke on the three models (Nova Micro, Haiku 4.5, Titan v2), read on the index object and the Properties table, write on the Leads table, and read/write on its own two memory tables.
 
-## 5. LangGraph agent graph
+## 5. Agent design: LangGraph orchestrates, Strands agents answer
 
-One compiled `StateGraph` runs inside the AgentCore container: a cheap router picks one specialist, the specialist gathers facts with plain Python tools, and one writer node streams the answer. Most questions cost two model calls: one router call and one answer call.
+The project's headline design: **LangGraph** owns routing, state, memory and guardrails; each specialist is a **Strands** agent with its own tools; both run together in one **AgentCore Runtime** container. Strands answers the question, and LangGraph decides who answers, what they may say and what is remembered.
 
-**State** (`agent/state.py`, a TypedDict): `prompt`, `property_id`, `property_context`, `history` (last 6 turns from the browser), `locale`, `intent`, `facts` (tool results), `answer`, `suggestions`, `trace`.
+```
+START → load_memory → router ─┬→ property_agent ─┐
+                              ├→ market_agent ───┤   (Strands agents:
+                              ├→ roi_agent ──────┤    tools + output gate)
+                              ├→ viewing_agent ──┼→ remember → END
+                              ├→ general_agent ──┤
+                              ├→ confirm_viewing ┤   (no model: "yes" saves the lead)
+                              └→ off_topic ──────┘   (no model: fixed reply)
+```
+
+**State** (`agent/state.py`): `prompt`, `property_id`, `visitor_id`, `property_context` (the listing open in the UI), `history` (the conversation, kept by the checkpointer), `profile` (long-term memory), `pending_viewing`, `intents`, `facts` (every tool result this turn), `answer`, `suggestions`, `trace`.
 
 **Nodes**
 
-| Node | Model | What it does |
+| Node | Built with | What it does |
 | --- | --- | --- |
-| `router` | Nova Micro (or Haiku), structured output | Returns `Route{intent, confidence}`; intents are property_search, market_intel, roi, scheduler, general, off_topic. Low confidence falls back to the existing keyword router. |
-| `property_search` | none | Turns the prompt into filters plus a vector lookup over the 20 listings; puts listing IDs and fields in `facts`. |
-| `market_intel` | none | Reads area stats from `data/area_stats.json` (dated, with source). |
-| `roi` | none | Deterministic yield, mortgage and break-even maths, ported from `roi_calculator.py`. |
-| `scheduler` | none | Collects viewing details; writes to the Leads table only after the user confirms. |
-| `writer` | Claude Haiku 4.5 | Streams the answer from `facts` only, then a structured suggestions list. |
-| `off_topic` | none | Returns the fixed "I specialise in Dubai real estate" reply with no model call. |
+| `load_memory` | LangGraph store | Loads the visitor's profile from long-term memory; resolves the open listing. |
+| `router` | Nova Micro, structured output (langchain-aws) | `Route{intent, second_intent, confidence}`; low confidence falls back to the keyword router. A "yes"/"no" while a viewing request is pending goes to `confirm_viewing` with no model call. |
+| `property_agent` | Strands + Claude Haiku 4.5 | Tools: `search_listings` (filters + hybrid vector/keyword ranking), `get_listing`, `compare_listings`. |
+| `market_agent` | Strands | Tools: `area_market` (dated area stats), `get_listing`. |
+| `roi_agent` | Strands | Tools: `calculate_roi` (deterministic yield, mortgage, cash-flow and payback maths), `search_listings`, `get_listing`. |
+| `viewing_agent` | Strands | Tools: `request_viewing` (validates details, returns what is missing or holds the request for confirmation), `get_listing`. It never writes a lead itself. |
+| `general_agent` | Strands | Tools: `catalogue_overview`, `get_listing`. |
+| `confirm_viewing` | none | On "yes", writes the pending request to Leads; on "no", cancels it. |
+| `off_topic` | none | The fixed "I specialise in Dubai real estate" reply. |
+| `remember` | LangGraph store + checkpointer | Updates the visitor profile and appends the turn to the conversation. |
 
-**Edges:** START → router → conditional edge on `intent` → one specialist → writer → END. `off_topic` goes straight to END. A two-intent question ("2BR in Marina and its yield") may fan out to two specialists before `writer`, using LangGraph's parallel branches.
+**Two intents** ("2BR in Marina and their yields"): the router's allowed pairs (search+ROI, search+market, market+ROI) give one agent the tools of both specialists, so there is still one answer and one stream.
 
-**Streaming:** the AgentCore entrypoint is an async generator over `graph.astream(..., stream_mode=["messages", "custom"])`. It yields the UI's events as is: a `status` event when routing starts, `chunk` events from the writer's tokens, `suggestions` after, then `done`.
+**Tools are plain Python** (the existing listing search, ROI maths, area stats), wrapped with Strands `@tool`. Every call's result is recorded into `facts`, which the output gate checks against.
 
-**No checkpointer.** The browser already sends history, so each invocation is stateless and nothing is stored between questions (§7).
+**Output gate.** Strands streams everything the model writes, including narration such as "Let me search…" before a tool call. Agent output reaches the browser only through the gate:
 
-## 6. Strands Agents vs OpenAI Agents SDK
+1. Text written before or between tool calls is held, and discarded when a tool call follows. Each tool call sends a `status` event instead ("Searching listings…").
+2. The final answer is released sentence by sentence (or table row by row). Each sentence is checked first: every AED figure in it must appear in a tool result this turn or in the user's own words.
+3. A sentence that fails stops the stream. The user gets a safe line instead ("I couldn't verify one figure…"), the agent is cancelled, and the trace records the figure. The bad sentence never reaches the browser.
+4. The `<<SUGGESTIONS>>` block is held back and becomes the `suggestions` event.
 
-**Strands is the cheaper choice for this stack, but the bigger saving is not nesting a second agent framework inside LangGraph at all.** Both SDKs are free and open source (Apache-2.0 and MIT). What you pay for is model tokens and runtime seconds, and the SDK choice only changes those indirectly. [Strands notes](https://thenewstack.io/agent-framework-container-wars/) · [license and feature comparison](https://www.developersdigest.tech/agent-frameworks/compare/strands-agents-vs-openai-agents-sdk)
+The gate cannot recall sentences already sent, but a wrong figure can only appear in the sentence that contains it, and that sentence is always checked before it goes out.
 
-| | Strands Agents | OpenAI Agents SDK |
+**Streaming:** the AgentCore entrypoint is an async generator over `graph.astream(..., stream_mode=["custom", "values"])`; the UI's events are unchanged: `status`, `chunk`…, `suggestions`, `done`.
+
+**Model calls per question:** router 1 + Strands loop 2 (pick tools, then answer); 3 in most cases, 4 if the agent needs a second round of tools.
+
+## 6. Why Strands inside LangGraph
+
+Both frameworks are free (Apache-2.0 / MIT); you pay for model tokens and runtime seconds. They do different jobs here:
+
+| | LangGraph | Strands Agents |
 | --- | --- | --- |
-| Licence fee | None | None |
-| Default model path | Bedrock, through your normal IAM role | OpenAI API: a second bill, an API key in Secrets Manager, and data leaves AWS |
-| Bedrock as provider | Native, including prompt caching | Through a LiteLLM-style adapter; not the main path |
-| AgentCore fit | Built alongside AgentCore; Memory session manager available | Supported by AgentCore Runtime like any framework |
-| Tracing | OpenTelemetry to CloudWatch | OpenAI dashboard by default |
-| You already know it | Yes, payroll-ai-strands | No |
+| Role in this project | Orchestration: routing, conditional edges, state, memory, guardrails | The specialists: a model plus tools, running its own tool loop |
+| Why it fits | Explicit, testable control flow; checkpointer and store interfaces with DynamoDB backends (`langgraph-checkpoint-aws`) | Bedrock-native through the normal IAM role; `@tool` from plain Python functions; built alongside AgentCore |
+| Already used in | payroll-ai (LangGraph in Lambda) | payroll-ai-strands (Strands on AgentCore, orchestrator in plain Python) |
 
-**Why "neither" may be cheapest.** Both SDKs run their own model-driven tool loop. Put one inside a LangGraph node and each question can cost 2–4 extra model calls while the inner agent decides which tool to call. In this design the specialists are deterministic Python, so LangGraph nodes calling Bedrock directly through `langchain-aws` (ChatBedrockConverse) do the job with exactly two calls.
+Combining them is the point of this project: neither earlier project used both. The OpenAI Agents SDK is not used; on Bedrock it adds a second vendor and no benefit.
 
-**Recommendation:** LangGraph + `langchain-aws` for every node in v1. If you want an agent SDK in the project for learning, use Strands in one place where a free-form tool loop helps, such as a later "compare these three listings" node, and measure its extra calls in the trace. Do not use the OpenAI Agents SDK here unless you want OpenAI models; it adds a second vendor and bill and gives no cost benefit on Bedrock.
+**Cost of the choice.** A Strands agent spends one model call choosing tools before it answers, so a question costs 3–4 model calls instead of the 2 of a fixed router → writer pipeline, about $0.005–0.008 instead of $0.003–0.004. That stays inside the ~$0.01 target (§8) and buys model-chosen tools, multi-step answers and a cleaner agent per specialist.
 
 ## 7. Data, RAG and memory
 
 With 20 listings, every store can be a file or an on-demand table. Nothing needs a server running.
 
 - **Listings:** the DynamoDB Properties table stays the source of truth for the api Lambda. The agent loads the same 20 items once per container start (one Scan) and keeps them in memory.
-- **Vector search:** `scripts/build_index.py` embeds each listing's description with Titan Text Embeddings v2 at deploy time and writes `listings_index.npz` (vectors + IDs) to S3. The agent loads it at start and runs cosine similarity in NumPy. Each question costs one query embedding and no vector database. If the corpus grows past a few thousand chunks, switch to S3 Vectors as in payroll-ai-strands.
-- **Market data:** `data/area_stats.json` holds per-area price per sq ft, yield range and transaction counts, each with an as-of date and source (DLD open data). This replaces the hard-coded market paragraph. Refreshing it is a manual script for now, with no scheduled job.
-- **Conversation memory:** none on the server. The browser already sends the last turns in `history`, and the graph uses the last 6. AgentCore Memory is left out because it bills per event and adds nothing for a single-tab chat.
-- **Leads and enquiries:** the existing DynamoDB Leads table, written by the api Lambda (enquiry form) and the scheduler node (confirmed viewings).
-- **Photos:** not touched by the backend except for the MEDIA_BASE_URL rewrite; served by the assets CloudFront distribution from S3.
+- **Vector search:** `scripts/build_index.py` embeds each listing with Titan Text Embeddings v2 and writes `listings_index.npz` (vectors + IDs) to S3. The agent loads it on first use and ranks by cosine similarity in NumPy, blended with keyword overlap. Each descriptive question costs one query embedding and no vector database. If the corpus grows past a few thousand chunks, switch to S3 Vectors as in payroll-ai-strands.
+- **Market data:** `data/area_stats.json` holds per-area price per sq ft, yield range and transaction counts, each with an as-of date. Refreshing it is a manual task for now.
+- **Leads and enquiries:** the existing DynamoDB Leads table, written by the api Lambda (enquiry form) and `confirm_viewing` (confirmed viewings).
+- **Photos:** not touched by the backend except for the MEDIA_BASE_URL rewrite.
+
+**Memory: two kinds, both in DynamoDB, both through LangGraph's own interfaces** (`langgraph-checkpoint-aws`):
+
+| | Conversation memory | Long-term memory |
+| --- | --- | --- |
+| What | The chat so far, a pending viewing request | The visitor's preferences: budget, areas, bedrooms, property types, developers, purpose, first name, listings looked at |
+| LangGraph piece | Checkpointer: `DynamoDBSaver`, `thread_id` = chat session | Store: `DynamoDBStore`, namespace `("visitor", visitor_id)` |
+| Table | `dubainest-agentcore-sessions-<env>` (PK/SK, TTL `ttl`) | `dubainest-agentcore-memory-<env>` (PK/SK, TTL `expires_at`) |
+| Kept for | 24 hours | 90 days since last use |
+| Key from the browser | `session_id`: new per chat window | `visitor_id`: random ID in localStorage, no login |
+
+- The profile is extracted by code, not by a model: the same filter parser that reads "2BR in Marina under 3M" updates the profile, so memory adds no model calls. Contact details (email, phone) never go into memory; they go only to Leads, after confirmation.
+- Agents see the profile as context ("Known from earlier visits: budget up to AED 3,000,000, Dubai Marina, 2 bedrooms"), so "anything new in my budget?" works on a later visit.
+- The browser still sends its last turns; they seed the conversation only when the server has none for that session (expired, or a local restart).
+- AgentCore Memory is not used: it bills per event, and DynamoDB on demand costs fractions of a cent at this traffic.
+- Locally and in tests the same graph uses LangGraph's in-memory saver and store (no `SESSIONS_TABLE` / `MEMORY_TABLE` set).
 
 ## 8. Cost: pay only when you ask
 
-**Estimate: about $0.004–0.006 per question with Haiku answers, and under $0.30/month idle.** At 100 questions a month that is roughly $1 in total. Model tokens are about 90% of the per-question cost; AgentCore compute is a rounding error. Prices are us-east-1 on-demand as published in 2026; re-check them before the first deploy.
+**Estimate: about $0.005–0.008 per question with Haiku-powered Strands agents, and under $0.30/month idle.** At 100 questions a month that is roughly $1 in total. Model tokens are about 90% of the per-question cost; AgentCore compute is a rounding error. Prices are us-east-1 on-demand as published in 2026; re-check them before the first deploy.
 
-**Per question** (assumes ~600-token router prompt, ~3,000-token writer prompt of which ~2,000 is a cached system prompt, ~400 output tokens)
+**Per question** (assumes ~600-token router prompt and a Strands agent making 2 Haiku calls of ~2,500 input tokens each, ~400 output tokens in total)
 
 | Item | Rate used | Est. per question |
 | --- | --- | --- |
 | Router, Nova Micro | $0.035 in / $0.14 out per 1M tokens ([source](https://avahi.ai/?p=23189)) | $0.00003 |
-| Writer, Claude Haiku 4.5 | $1 in / $5 out / $0.10 cache read per 1M ([source](https://llmgateway.io/models/claude-haiku-4-5/aws-bedrock)) | $0.003–0.005 |
+| Strands agent, Claude Haiku 4.5 (2 calls) | $1 in / $5 out / $0.10 cache read per 1M ([source](https://llmgateway.io/models/claude-haiku-4-5/aws-bedrock)) | $0.005–0.008 |
+| Memory, DynamoDB on demand (~2 reads, ~3 writes) | $0.125 / $0.625 per 1M request units | under $0.00001 |
 | Query embedding, Titan v2 | ~50 tokens | under $0.00001 |
 | AgentCore Runtime | $0.0895 per vCPU-hour, $0.00945 per GB-hour ([source](https://venturebeat.com/ai/aws-unveils-bedrock-agentcore-a-new-platform-for-building-enterprise-ai-agents-with-open-source-frameworks-and-tools)); Runtime v2 rates reported at $0.1276 and $0.0169 ([source](https://www.eesel.ai/blog/bedrock-managed-agents-pricing)) | $0.0001–0.0004 |
 | api Lambda (streams ~10 s at 512 MB) | free tier | $0 |
-| **Total** | | **~$0.004–0.006** |
+| **Total** | | **~$0.005–0.008** |
 
 With Sonnet-tier answers instead of Haiku, expect roughly 3×: about $0.015 per question.
 
@@ -145,7 +182,7 @@ AgentCore Runtime bills per second of actual CPU and peak memory, and I/O wait s
 
 - A daily question cap in the api Lambda, 200/day, using an atomic DynamoDB counter. Worst case is about $1/day.
 - Per-IP limit, 20/min, also a DynamoDB counter with TTL. It replaces slowapi, which cannot share state across Lambda instances.
-- Reserved concurrency of 3 on the api Lambda, `max_tokens` 600 on the writer, and the existing 2,000-character prompt cap.
+- Reserved concurrency of 3 on the api Lambda, `max_tokens` 600 per agent answer, 4 model turns per Strands agent, and the existing 2,000-character prompt cap.
 - AWS Budget of $10/month, alerts at 50%, 80% and 100%.
 
 ## 9. Repository layout
@@ -164,7 +201,9 @@ dubainest-agentcore/
 │   ├── main.py          # BedrockAgentCoreApp entrypoint, async generator
 │   ├── graph.py         # StateGraph build + compile
 │   ├── state.py
-│   ├── nodes/           # router, property_search, market_intel, roi, scheduler, writer
+│   ├── nodes/           # load_memory, router, agent nodes, confirm_viewing, remember
+│   ├── specialists/     # Strands agents: prompts, @tool wrappers, output gate
+│   ├── memory.py        # DynamoDBSaver / DynamoDBStore (or in-memory locally)
 │   ├── tools/           # listings, vector_index, area_stats, leads
 │   ├── prompts.py
 │   └── Dockerfile
@@ -184,9 +223,10 @@ Cheap checks run in the Lambda before any agent starts, so blocked or off-topic 
 **Guardrails**
 
 - **guard_in (api Lambda, free):** the existing regex injection screen, the 2,000-character cap, the daily cap and the per-IP limit.
-- **off_topic route (graph, one Nova Micro call):** fixed reply, no writer call.
-- **Grounding rule (writer prompt):** prices, yields and dates may come only from `facts`. A post-check compares every AED figure in the answer against `facts` and logs mismatches to the trace.
-- **Scheduler writes:** a lead is saved only after an explicit "yes" in the next turn. Nothing else writes data.
+- **off_topic route (graph, one Nova Micro call):** fixed reply, no agent runs.
+- **Output gate (graph, free):** every sentence an agent writes is checked before it is sent: its AED figures must come from this turn's tool results or the user's words. A failing sentence stops the stream (§5). Narration before tool calls never reaches the user.
+- **Tool limits:** each Strands agent is capped at 4 model turns; tools are read-only except `request_viewing`, which only holds a request.
+- **Viewing writes:** a lead is saved only by `confirm_viewing`, after an explicit "yes" to a pending request. Contact details must appear in the user's own messages (the tool rejects invented ones). Memory never stores email or phone.
 - **Bedrock Guardrail:** optional. It bills per text unit; keep it off in v1 and enable it if the demo goes public beyond your portfolio.
 
 **Evals** (`evals/`, run locally against the in-process graph)
@@ -195,8 +235,9 @@ Cheap checks run in the Lambda before any agent starts, so blocked or off-topic 
 | --- | --- | --- |
 | Routing | ~40 labelled prompts, intent matches | 90%+ before deploy |
 | SSE contract | event order and shape match what `chatbot.component.ts` parses | must pass |
-| Grounding | every AED number in the answer appears in `facts` | must pass on 20 fixed cases |
-| Cost | tokens and model calls per question from the trace | 2 calls or fewer on 95% of cases |
+| Grounding | every AED number in the answer appears in a tool result; the gate blocked nothing | must pass on 20 fixed cases |
+| Cost | tokens and model calls per question from the trace | 4 calls or fewer on 95% of cases |
+| Memory | a follow-up without browser history uses the session; a new session for the same visitor uses the profile; the viewing flow saves one lead after "yes" | must pass |
 | Answer quality (on demand) | LLM-as-judge on ~20 cases, as in payroll-ai-strands | report only |
 
 ## 11. Build plan
@@ -207,7 +248,7 @@ Eight steps; the first four run entirely on your laptop with only Bedrock calls.
 | --- | --- | --- |
 | 1 | Copy `dubainest-ai` to `dubainest-agentcore`, `git init`, remove backend/agents/infra stacks for VPC, ALB, ECS | frontend builds unchanged |
 | 2 | `api/` with properties, facets, enquiries, property-intro (no chat yet) against the existing DynamoDB tables | listings, filters and detail pages work locally |
-| 3 | `agent/` graph with router, specialists and writer, run in-process | routing and grounding evals pass |
+| 3 | `agent/` graph with router and specialists, run in-process; rebuilt with Strands agents, output gate and memory (§5, §7) | routing, grounding and memory evals pass |
 | 4 | `api/chat_relay.py` streaming in local mode, plus `build_index.py` | chat works end to end in the browser on localhost |
 | 5 | CDK: api Lambda + Function URL, CloudFront `/api/*` behaviour switched to it | listings live on CloudFront, no ALB |
 | 6 | CDK or starter toolkit: AgentCore Runtime (public network), ECR image, IAM | `InvokeAgentRuntime` streams from the CLI |
@@ -223,18 +264,20 @@ Eight steps; the first four run entirely on your laptop with only Bedrock calls.
 - **CDK coverage for AgentCore:** confirm the CloudFormation resource for AgentCore Runtime in the current aws-cdk-lib; fall back to the AgentCore starter toolkit for that one resource.
 - **Runtime v2 pricing:** two published rate sets exist (§8). Re-check before deploy; either way the amount is fractions of a cent.
 - **Model access:** Haiku 4.5 and Nova Micro must be enabled in us-east-1, via inference profiles like the current `bedrockModelArn`.
-- **Market data freshness:** `area_stats.json` goes stale; the writer must quote its as-of date.
+- **Market data freshness:** `area_stats.json` goes stale; agents must quote its as-of date.
 
 ## 13. Decisions needed
 
 | # | Question | Proposed |
 | --- | --- | --- |
-| 1 | Agent SDK inside LangGraph | None in v1 (langchain-aws); Strands later in one node if you want it |
+| 1 | Agent SDK inside LangGraph | **Strands** for every specialist; LangGraph orchestrates (revised 2026-11-14) |
 | 2 | Answer model | Claude Haiku 4.5; Sonnet as a config switch |
 | 3 | Router model | Nova Micro; Haiku if routing evals fall below 90% |
 | 4 | IaC | CDK (TypeScript), to match dubainest-ai; payroll-ai-strands used Terraform |
 | 5 | Share or copy AWS resources | Share the assets bucket and DynamoDB tables; new frontend distribution so both versions can run side by side |
 | 6 | Old dubainest-ai stacks | Destroy the backend, network and observability stacks after step 7 |
 | 7 | Folder and repo name | `dubainest-agentcore` |
+| 8 | Memory | Both: conversation (LangGraph checkpointer) and long-term visitor profile (LangGraph store), in DynamoDB |
+| 9 | Agent output | Streamed through the output gate, sentence by sentence; not held until complete |
 
 Next: once these are settled, start build step 1.
