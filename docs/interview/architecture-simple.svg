@@ -26,7 +26,7 @@
   </style>
 
   <rect width="1400" height="760" fill="#ffffff"/>
-  <text x="40" y="46" class="t">DubaiNest AgentCore</text>
+  <text x="40" y="46" class="t">DubaiNest Real Estate Agent</text>
   <text x="40" y="70" class="st">A question travels Browser → CloudFront → Lambda → AgentCore; the answer streams back the same way. Nothing bills while idle.</text>
 
   <!-- ===== Row 1: request path ===== -->
@@ -38,7 +38,7 @@
   <rect x="395" y="110" width="250" height="90" class="box"/>
   <text x="520" y="137" text-anchor="middle" class="h">CloudFront</text>
   <text x="520" y="159" text-anchor="middle" class="b">/* → S3 site · /api/* → Lambda</text>
-  <text x="520" y="178" text-anchor="middle" class="s">signs the request; only it may call the Lambda</text>
+  <text x="520" y="178" text-anchor="middle" class="s">signs requests; only it can call the Lambda</text>
 
   <rect x="750" y="110" width="250" height="90" class="box"/>
   <text x="875" y="137" text-anchor="middle" class="h">api Lambda</text>

@@ -6,9 +6,16 @@
     .venv/bin/python scripts/invoke_agent.py --events "hi"     # raw SSE events + timings
     .venv/bin/python scripts/invoke_agent.py --session S --visitor V "..."   # memory: reuse ids
 
+A developer tool. It runs on your machine, uses your AWS credentials, and calls
+the AgentCore Runtime in AWS directly with the same InvokeAgentRuntime call the
+api Lambda makes. It skips CloudFront and the Lambda, so the injection screen
+and the question caps don't apply, and it doesn't warm the Lambda. To test the
+real path, use the site or scripts/smoke.sh. To run the graph on your own
+machine instead, use `python -m agent.cli`.
+
 The runtime ARN comes from --arn, else AGENT_RUNTIME_ARN, else the
-DubaiNestAgentCoreAgentStack output. Calls Bedrock through the runtime: about
-$0.003 per question. The same InvokeAgentRuntime call the api Lambda makes in step 7.
+DubaiNestAgentCoreAgentStack output. Each question calls Bedrock through the
+runtime: about $0.007 (router + Strands agent, eval average).
 """
 
 from __future__ import annotations

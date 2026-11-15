@@ -149,7 +149,7 @@ With 20 listings, every store can be a file or an on-demand table. Nothing needs
 | Key from the browser | `session_id`: new per chat window | `visitor_id`: random ID in localStorage, no login |
 
 - The profile is extracted by code, not by a model: the same filter parser that reads "2BR in Marina under 3M" updates the profile, so memory adds no model calls. Contact details (email, phone) never go into memory; they go only to Leads, after confirmation.
-- Agents see the profile as context ("Known from earlier visits: budget up to AED 3,000,000, Dubai Marina, 2 bedrooms"), so "anything new in my budget?" works on a later visit.
+- Agents see the profile as context ("Known from earlier visits: budget up to AED 3,000,000, Dubai Marina, 2 bedrooms"), so "anything new in my budget?" works on a later visit. Memory is available, not imposed: the budget is included only when the question is about budget, the other preferences only when it refers to the visitor ("for me", "anything", "recommend"); otherwise only the first name. Naming a listing doesn't record its developer or area as a preference.
 - The browser still sends its last turns; they seed the conversation only when the server has none for that session (expired, or a local restart).
 - AgentCore Memory is not used: it bills per event, and DynamoDB on demand costs fractions of a cent at this traffic.
 - Locally and in tests the same graph uses LangGraph's in-memory saver and store (no `SESSIONS_TABLE` / `MEMORY_TABLE` set).

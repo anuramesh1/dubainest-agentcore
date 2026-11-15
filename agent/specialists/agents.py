@@ -92,9 +92,21 @@ def user_message(state: AgentState) -> str:
     if pc := state.get("property_context"):
         brief = {k: pc[k] for k in ("id", "title", "area", "price_aed", "link") if k in pc}
         parts.append(f"Listing open in the UI: {json.dumps(brief, ensure_ascii=False)}")
-    with_budget = memory.mentions_budget(state["prompt"])
-    if known := memory.describe(state.get("profile"), with_budget=with_budget):
+    q = state["prompt"]
+    known = memory.describe(
+        state.get("profile"),
+        with_budget=memory.mentions_budget(q),
+        with_preferences=memory.refers_to_visitor(q),
+    )
+    if known:
         parts.append(f"Known about this visitor from earlier visits: {known}")
+    if not memory.refers_to_visitor(q):
+        # Placed next to the question: a rule in the system prompt alone loses to a
+        # chat that just discussed the budget.
+        parts.append(
+            "Answer this on its own terms: don't compare with the visitor's budget or "
+            "earlier preferences unless the question asks."
+        )
     parts.append(f"Question: {state['prompt']}")
     return "\n".join(parts)
 

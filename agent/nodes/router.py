@@ -138,6 +138,13 @@ AGENT_NODES: dict[str, str] = {
 
 def _routed(update: dict[str, Any], intents: list[Intent], entry: dict[str, Any]) -> dict[str, Any]:
     route = "off_topic" if "off_topic" in intents else AGENT_NODES.get(intents[0], "general_agent")
+    # One line per question in the runtime logs, so a wrong route can be diagnosed.
+    log.info(
+        "route=%s intents=%s %s",
+        route,
+        intents,
+        {k: entry[k] for k in ("rule", "intent", "second_intent", "confidence") if k in entry},
+    )
     return {**update, "intents": intents, "route": route, "trace": [entry]}
 
 
@@ -178,6 +185,13 @@ async def router(state: AgentState, *, classify, min_confidence: float) -> dict[
         "second_intent": route.second_intent,
         "confidence": route.confidence,
     }
+    # A question that names a DubaiNest listing is never off-topic, whatever the
+    # small router model says (a rare miss seen live on "What's the ROI on Burj Vista?").
+    if route.intent == "off_topic" and listings.mentioned_listings(prompt):
+        intent = keyword_route(prompt)
+        if intent not in ("off_topic", "general"):
+            entry["rule"] = f"named_listing_not_off_topic→{intent}"
+            return _routed(update, [intent], entry)
     if route.confidence < min_confidence and route.intent != "off_topic":
         intent = keyword_route(context_text(state))
         entry["rule"] = f"keywords_low_confidence→{intent}"

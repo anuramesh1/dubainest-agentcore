@@ -125,7 +125,7 @@ Market figures in [data/area_stats.json](data/area_stats.json) are the notes car
 .venv/bin/python -m evals memory -v
 ```
 
-Last run: routing 44/44, grounding 20/20 (output gate blocked nothing), every question in 4 model calls or fewer (median 3), about 5,850 input / 340 output tokens and **$0.0066 per question**, 3.3 s average; memory 5/5 (a follow-up with no browser history, a viewing confirmed by "yes", the budget recalled in a new session).
+Last run: routing 44/44, grounding 20/20 (output gate blocked nothing), every question in 4 model calls or fewer (median 3), about 6,100 input / 320 output tokens and **$0.0068 per question**, 3.1 s average; memory 5/5 (a follow-up with no browser history, a viewing confirmed by "yes", the budget recalled in a new session).
 
 ## Tests and checks
 
@@ -166,7 +166,7 @@ scripts/smoke.sh             # checks the live site; its URL is in .deploy/outpu
 - **Stack** ([infra/lib/agent-stack.ts](infra/lib/agent-stack.ts)): `AWS::BedrockAgentCore::Runtime` in PUBLIC network mode (no VPC, no NAT). Sessions end after 5 idle minutes (1 hour max). Listings come from the Properties table (one Scan per microVM); the vector index from a private S3 bucket (`INDEX_URI`).
 - **Memory tables**: `dubainest-agentcore-sessions-<env>` (checkpointer, TTL `ttl`) and `dubainest-agentcore-memory-<env>` (store, TTL `expires_at`), on demand.
 - **Role**: invoke Nova Micro, Claude Haiku 4.5 and Titan v2 only; Scan Properties; PutItem Leads (confirmed viewings); read the index object; read/write its two memory tables; logs and traces.
-- **Measured** (warm): `status` at ~0.7 s, the tool's status at ~2 s, first answer text at ~3 s, done at ~4–5 s. The first call after idle (new microVM, imports, Scan, index load) took ~10 s to first text.
+- **Measured** (warm): `status` at ~0.7 s, the tool's status at ~2 s, first answer text at ~3 s, done at ~4–5 s. The first call after idle (new microVM, imports, Scan, index load) takes 6–10 s to first text; through the site on 2026-11-15: 6.1 s, then 3.6 s for a new chat right after and 2.2 s for a follow-up in the same chat.
 - **Read the stream unbuffered.** boto3's `StreamingBody.iter_lines()` reads 1 KB blocks and makes a short answer arrive all at once; [invoke_agent.py](scripts/invoke_agent.py) reads with `read1()`, and the step 7 relay must too.
 - **Not yet wired to the site.** The api Lambda starts relaying to the runtime in step 7.
 

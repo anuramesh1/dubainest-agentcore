@@ -36,7 +36,7 @@
   <rect width="1500" height="960" fill="#ffffff"/>
 
   <!-- Title -->
-  <text x="30" y="40" font-size="24" font-weight="800" fill="#0f172a">DubaiNest AgentCore</text>
+  <text x="30" y="40" font-size="24" font-weight="800" fill="#0f172a">DubaiNest Real Estate Agent</text>
   <text x="30" y="64" class="t">LangGraph orchestrates Strands agents on Amazon Bedrock AgentCore Runtime · Lambda relay · DynamoDB memory · nothing bills hourly while idle</text>
 
   <!-- ── Browser ─────────────────────────────────────────── -->

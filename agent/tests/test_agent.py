@@ -390,6 +390,74 @@ def test_remembered_budget_only_when_the_question_asks():
     assert "budget up to AED 2,000,000" in memory.describe(profile)
 
 
+def test_remembered_preferences_only_when_the_question_refers_to_the_visitor():
+    profile = {
+        "budget_max_aed": 2_000_000,
+        "developers": ["DAMAC"],
+        "property_types": ["villa"],
+        "purpose": "invest",
+        "first_name": "Sara",
+    }
+    for q in (
+        "Tell me about Chelsea Residences",
+        "What's the yield on Burj Vista?",
+        "How is the Downtown market doing?",
+        "Show me apartments in Dubai Marina",
+    ):
+        assert not memory.refers_to_visitor(q), q
+        assert memory.describe(profile, with_budget=False, with_preferences=False) == "name Sara"
+    for q in (
+        "Anything in my budget?",
+        "Recommend something for me",
+        "Act as my buyer's agent and shortlist villas",
+        "Show me what I looked at before",
+    ):
+        assert memory.refers_to_visitor(q), q
+    full = memory.describe(profile, with_budget=False)
+    assert "DAMAC" in full and "villa" in full and "invest" in full
+
+
+def test_agent_sees_only_the_name_for_a_named_listing():
+    store = InMemoryStore()
+    g, factory = graph(fake_classify("property_search"), [SEARCH, ("text", "ok")], store=store)
+    store.put(
+        memory.namespace("v-1"),
+        memory.PROFILE_KEY,
+        {"budget_max_aed": 2_000_000, "property_types": ["villa"], "first_name": "Sara"},
+    )
+    run(g, "Tell me about Chelsea Residences")
+    prompt = factory.made[0].prompt
+    assert "name Sara" in prompt and "villa" not in prompt and "budget up to" not in prompt
+    assert "don't compare with the visitor's budget" in prompt
+    run(g, "Anything in my budget?", session="s-2")
+    assert "don't compare" not in factory.made[1].prompt
+
+
+def test_a_named_listing_is_never_off_topic():
+    g, factory = graph(fake_classify("off_topic", confidence=0.9), [("text", "ok")])
+    _, f = run(g, "What's the ROI on Burj Vista?")
+    router = next(t for t in f["trace"] if t["node"] == "router")
+    assert router["rule"] == "named_listing_not_off_topic→roi"
+    assert any(t["node"] == "roi_agent" for t in f["trace"])
+    _, f = run(g, "Give me a recipe for hummus", session="s-2")
+    assert any(t["node"] == "off_topic" for t in f["trace"])
+
+
+def test_naming_a_listing_is_not_a_preference():
+    p = memory.update_profile({}, "What's the ROI on DAMAC Islands?")
+    assert "developers" not in p and "areas" not in p
+    p = memory.update_profile({}, "Any DAMAC villas in Dubailand?")
+    assert p["developers"] == ["DAMAC"]
+
+
+def test_roi_returns_the_monthly_figures():
+    r = roi.roi_numbers(1_850_000, 5.25, 994)
+    assert r["monthly_rent_aed"] == round(r["annual_rent_aed"] / 12)
+    assert r["mortgage"]["monthly_cash_flow_aed"] * 12 == pytest.approx(
+        r["mortgage"]["annual_cash_flow_aed"], abs=12
+    )
+
+
 def test_update_profile_merges_and_keeps_newest():
     p = memory.update_profile({}, "villa in Palm under 10M for my family")
     p = memory.update_profile(p, "or Dubai Hills, budget up to 8M")

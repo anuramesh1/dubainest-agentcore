@@ -48,8 +48,24 @@ _BUDGET_ASK = re.compile(
 )
 
 
+# The other remembered preferences (areas, type, developer, bedrooms, purpose,
+# listings seen) are shared only when the question refers to the visitor's own
+# search: "anything for me?", "recommend something", "in my area". A question
+# about a named listing or the market is answered on its own terms.
+_ABOUT_ME = re.compile(
+    r"\b(for (me|us|my \w+)|my (preferences|criteria|search|requirements|needs|family|areas?)"
+    r"|suits? (me|us)|(would|do) (i|we) like|anything|something|recommend\w*|suggest\w*"
+    r"|shortlist|options? for me|again|last time|before|earlier|what i (saw|looked at|liked))\b",
+    re.I,
+)
+
+
 def mentions_budget(prompt: str) -> bool:
     return bool(_BUDGET_ASK.search(prompt or ""))
+
+
+def refers_to_visitor(prompt: str) -> bool:
+    return mentions_budget(prompt) or bool(_ABOUT_ME.search(prompt or ""))
 
 
 def checkpointer() -> BaseCheckpointSaver:
@@ -85,7 +101,11 @@ def update_profile(
 ) -> dict[str, Any]:
     """The profile after this message: newest stated preference wins, lists merge."""
     p = dict(profile or {})
-    f = listings.parse_filters(prompt)
+    # "ROI on DAMAC Islands" names a listing; it isn't a preference for DAMAC or Dubailand
+    text = prompt
+    for named in listings.mentioned_listings(prompt):
+        text = re.sub(re.escape(listings.project_name(named)), " ", text, flags=re.I)
+    f = listings.parse_filters(text)
 
     def merge(key: str, values: list[str]) -> None:
         if values:
@@ -114,10 +134,13 @@ def update_profile(
     return p
 
 
-def describe(profile: dict[str, Any] | None, *, with_budget: bool = True) -> str:
+def describe(
+    profile: dict[str, Any] | None, *, with_budget: bool = True, with_preferences: bool = True
+) -> str:
     """One line for the agent's context, e.g. 'budget up to AED 3,000,000; Dubai Marina'.
 
-    with_budget=False leaves the budget out (the question doesn't ask about it).
+    Memory is available, not imposed: with_budget=False leaves the budget out and
+    with_preferences=False leaves out everything but the first name.
     """
     if not profile:
         return ""
@@ -128,6 +151,8 @@ def describe(profile: dict[str, Any] | None, *, with_budget: bool = True) -> str
         parts.append(f"budget up to AED {v:,}")
     if with_budget and (v := profile.get("budget_min_aed")):
         parts.append(f"budget from AED {v:,}")
+    if not with_preferences:
+        return "; ".join(parts)
     if v := profile.get("bedrooms"):
         parts.append(f"{v} bedrooms")
     if v := profile.get("min_bedrooms"):
