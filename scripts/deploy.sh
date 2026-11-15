@@ -7,9 +7,10 @@
 #   scripts/deploy.sh --site      # rebuild + upload the UI only
 #
 # Needs: AWS credentials for the account, Docker running (the api and agent
-# images are built for arm64), Node 20+, the repo's .venv. The assets domain for photos is read from the
-# shared DubaiNestDataStack (owned by dubainest-ai), so nothing account-specific
-# lives in this repo.
+# images are built for arm64), Node 20+, the repo's .venv.
+# Photos: MEDIA_BASE_URL (e.g. https://<cdn>/media/photos) if set, else the
+# AssetsCloudFrontDomain output of a DubaiNestDataStack if the account has one,
+# else none (listings show without photos). Nothing account-specific lives here.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -50,10 +51,14 @@ if [[ "$MODE" == "all" || "$MODE" == "--agent" ]]; then
 fi
 
 if [[ "$MODE" == "all" || "$MODE" == "--infra" ]]; then
-  ASSETS="$(output DubaiNestDataStack AssetsCloudFrontDomain)"
-  echo "→ photos from $ASSETS/media/photos"
+  MEDIA="${MEDIA_BASE_URL:-}"
+  if [[ -z "$MEDIA" ]]; then
+    ASSETS="$(output DubaiNestDataStack AssetsCloudFrontDomain 2>/dev/null || true)"
+    [[ -n "$ASSETS" && "$ASSETS" != "None" ]] && MEDIA="$ASSETS/media/photos"
+  fi
+  echo "→ photos from ${MEDIA:-(none: set MEDIA_BASE_URL)}"
   (cd "$ROOT/infra" && npx cdk deploy "$API_STACK" "$SITE_STACK" \
-    -c mediaBaseUrl="$ASSETS/media/photos" --require-approval "$APPROVAL")
+    -c mediaBaseUrl="$MEDIA" --require-approval "$APPROVAL")
 fi
 
 if [[ "$MODE" == "all" || "$MODE" == "--site" ]]; then

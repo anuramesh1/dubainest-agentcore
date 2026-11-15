@@ -30,8 +30,7 @@ export class ObservabilityStack extends cdk.Stack {
     const isProd = props.isProd ?? false;
     const env = isProd ? "prod" : "dev";
 
-    // The tables are shared with dubainest-ai, which still owns them (spec §13
-    // decision 5), so they are referenced by name, never created here.
+    // The tables are created outside CDK, so they are referenced by name.
     const leadsTable = dynamodb.Table.fromTableName(
       this,
       "LeadsTable",

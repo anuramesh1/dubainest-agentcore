@@ -30,7 +30,7 @@ jobs:
       - name: Seed catalogue loads
         run: python -c "import sys; sys.path.insert(0, 'data'); from mock_properties import PROPERTIES; assert len(PROPERTIES) == 20"
 
-  # ─── Frontend: lint + build (copied unchanged from dubainest-ai) ───
+  # ─── Frontend: lint + build ───
   frontend:
     runs-on: ubuntu-latest
     defaults:

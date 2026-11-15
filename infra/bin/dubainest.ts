@@ -7,17 +7,14 @@ import { ObservabilityStack } from "../lib/observability-stack";
 
 // Only stacks that bill nothing (or cents) while idle.
 //
-// Removed with the Fargate backend: NetworkStack (VPC + NAT), BackendStack
-// (ECS + ALB), VectorStack (OpenSearch Serverless, never deployed).
+// No VPC, NAT, load balancer or provisioned capacity.
 //
-// Not here on purpose: a DataStack. The DynamoDB tables and the assets bucket
-// are shared with dubainest-ai, which still owns them (spec §13 decision 5);
-// this app refers to them by name. Every stack and resource name here starts
-// with DubaiNestAgentCore / dubainest-agentcore, so a deploy from this folder
-// can never update the old DubaiNest* stacks.
+// Not here on purpose: the Properties and Leads tables and the photos bucket.
+// They are created once outside CDK (see the README) and referenced by name,
+// so their data outlives any stack. Every stack and resource name here starts
+// with DubaiNestAgentCore / dubainest-agentcore.
 //
-// ApiStack (Lambda + Function URL) since step 5, AgentStack (AgentCore
-// Runtime) since step 6. Deploy with scripts/deploy.sh.
+// Deploy with scripts/deploy.sh.
 
 const app = new cdk.App();
 
@@ -30,14 +27,14 @@ const monthlyBudgetUsd = Number(
   app.node.tryGetContext("monthlyBudgetUsd") ?? "10",
 );
 const envName = isProd ? "prod" : "dev";
-// Shared with dubainest-ai's DataStack, which owns them.
+// Created outside CDK (see the README); override with -c propertiesTable=… -c leadsTable=…
 const propertiesTableName =
   app.node.tryGetContext("propertiesTable") ??
   `dubainest-properties-${envName}`;
 const leadsTableName =
   app.node.tryGetContext("leadsTable") ?? `dubainest-leads-${envName}`;
 // The assets CloudFront base for photos, e.g. https://<domain>/media/photos.
-// scripts/deploy.sh reads it from DubaiNestDataStack's AssetsCloudFrontDomain.
+// scripts/deploy.sh passes MEDIA_BASE_URL (empty = no photos).
 const mediaBaseUrl: string = app.node.tryGetContext("mediaBaseUrl") ?? "";
 
 // The CDK CLI fills CDK_DEFAULT_ACCOUNT from your AWS credentials.

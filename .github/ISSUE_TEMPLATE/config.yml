@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 📋 Project Requirements Document
-    url: https://github.com/your-org/dubainest-ai/blob/main/docs/PRD.html
-    about: Read the full PRD before opening an issue.
+  - name: 📋 Project README
+    url: https://github.com/anuramesh1/dubainest-agentcore#readme
+    about: Read the README (setup, architecture, deploy) before opening an issue.

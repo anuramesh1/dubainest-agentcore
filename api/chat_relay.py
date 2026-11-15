@@ -4,10 +4,9 @@ SSE events unchanged.
     AGENT_MODE=local      run agent/ in this process (local dev)
     AGENT_MODE=agentcore  InvokeAgentRuntime and pass its stream through (AWS)
 
-guard_in runs here, before any agent starts (spec §10): the regex
-prompt-injection screen and the 2,000-character cap ported from dubainest-ai
-agent_service.py, then the per-IP and daily caps (api/limits.py). Blocked
-questions never wake AgentCore.
+guard_in runs here, before any agent starts: the regex prompt-injection screen
+and the 2,000-character cap, then the per-IP and daily caps (api/limits.py).
+Blocked questions never wake AgentCore.
 """
 
 from __future__ import annotations

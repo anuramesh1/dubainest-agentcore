@@ -1,8 +1,7 @@
 """POST /api/enquiries: the detail page's enquiry form, saved to the Leads table.
 
-dubainest-ai kept enquiries in process memory, so they were lost on restart and
-never reached Leads. Here each one is a Leads item (spec §7), keyed by leadId,
-findable per listing through the table's ByProperty index (propertyId, createdAt).
+Each enquiry is a Leads item keyed by leadId, with propertyId and createdAt, so
+enquiries survive restarts and sit next to the chat's confirmed viewings.
 """
 
 from __future__ import annotations

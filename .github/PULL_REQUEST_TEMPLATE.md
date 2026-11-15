@@ -4,7 +4,7 @@
 <!-- 1–2 sentences. What does this PR do and why? -->
 
 ## Build step
-<!-- Spec docs/00-spec.md §11 -->
+<!-- See the README for setup, tests and deploy. -->
 - [ ] 1 — Copy, git init, remove VPC/ALB/ECS
 - [ ] 2 — api/ without chat
 - [ ] 3 — agent/ graph in-process

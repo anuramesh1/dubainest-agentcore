@@ -149,3 +149,6 @@ evals/results/
 
 # ── Deploy outputs (live URLs, ids): local only, never committed ──
 .deploy/
+
+# Personal reference notes: kept locally, not published
+docs/

@@ -1,19 +1,21 @@
 # Infrastructure — DubaiNest AgentCore
 
-AWS CDK (TypeScript). See [`../docs/00-spec.md`](../docs/00-spec.md) §4 and §11.
+AWS CDK (TypeScript). Deploy with [`../scripts/deploy.sh`](../scripts/deploy.sh); see the main [README](../README.md).
 
-| Stack                                  | Resources                                                                 | Build step     |
-| -------------------------------------- | ------------------------------------------------------------------------- | -------------- |
-| `DubaiNestAgentCoreFrontendStack`      | S3 site bucket, CloudFront; `/api/*` origin is a placeholder until step 5 | 1 (trimmed), 5 |
-| `DubaiNestAgentCoreObservabilityStack` | SNS topic, Leads throttle alarm, dashboard, $10/month budget              | 1 (trimmed), 7 |
-| `DubaiNestAgentCoreApiStack`           | api Lambda + Function URL                                                 | 5              |
-| `DubaiNestAgentCoreAgentStack`         | AgentCore Runtime, ECR, IAM                                               | 6              |
+| Stack | Resources |
+| --- | --- |
+| `DubaiNestAgentCoreAgentStack` | AgentCore Runtime (agent image), IAM role, sessions and memory tables, index bucket |
+| `DubaiNestAgentCoreApiStack` | api Lambda + Function URL (IAM, response streaming), limits table |
+| `DubaiNestAgentCoreFrontendStack` | S3 site bucket, CloudFront with origin access control, SPA rewrite function |
+| `DubaiNestAgentCoreObservabilityStack` (optional) | SNS topic, Leads throttle alarm, dashboard, monthly AWS Budget |
 
-Shared with `dubainest-ai` and referenced by name only, never created here: the DynamoDB tables (`dubainest-{properties,leads,conversations}-dev`) and the assets bucket `dubainest-assets-<account>-us-east-1`.
+Not created here, referenced by name: the Properties and Leads DynamoDB tables (`dubainest-properties-dev`, `dubainest-leads-dev`; see Prerequisites in the main README) and the photos bucket behind `MEDIA_BASE_URL`.
 
 ```bash
 npm ci
 npx tsc --noEmit
 npx cdk synth
-npx cdk deploy DubaiNestAgentCoreObservabilityStack -c alertEmail=<you>   # budget + alarm emails
+npx cdk deploy DubaiNestAgentCoreObservabilityStack -c alertEmail=<you>   # optional: budget + alarm emails
 ```
+
+Context: `-c propertiesTable=… -c leadsTable=… -c mediaBaseUrl=… -c dailyQuestionCap=… -c perIpPerMinute=… -c monthlyBudgetUsd=… -c isProd=true`.

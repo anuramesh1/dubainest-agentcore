@@ -1,6 +1,5 @@
-"""The 20-listing seed, moved here from dubainest-ai/backend/app/data/ in build
-step 1. Read by scripts/seed_properties.py now, and by the api Lambda and the
-agent from steps 2-3."""
+"""The 20-listing seed: written to the Properties table by scripts/seed_properties.py,
+and read directly by tests, evals and LISTINGS_SOURCE=seed."""
 
 from __future__ import annotations
 

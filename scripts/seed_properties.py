@@ -27,7 +27,7 @@ _FLOAT_FIELDS = {"roi", "lat", "lng"}
 
 
 def property_to_item(data: dict[str, Any]) -> dict[str, Any]:
-    """Map a Property-shaped dict to a DynamoDB item (same mapping as dubainest-ai)."""
+    """Map a Property-shaped dict to a DynamoDB item (the inverse of api/properties.py)."""
     item = dict(data)
     item["propertyId"] = item.pop("id")
     item["priceAed"] = item.pop("price")

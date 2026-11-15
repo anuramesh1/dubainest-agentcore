@@ -8,7 +8,7 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
 
 export interface ApiStackProps extends cdk.StackProps {
-  // Shared with dubainest-ai (spec §13 decision 5): referenced by name only.
+  // Created outside CDK (see the README): referenced by name only.
   readonly propertiesTableName: string;
   readonly leadsTableName: string;
   // e.g. https://<assets-cloudfront-domain>/media/photos (empty = no rewrite)

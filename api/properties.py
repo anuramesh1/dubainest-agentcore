@@ -1,12 +1,9 @@
 """GET /api/properties, /api/properties/facets, /api/properties/{id}.
 
-Ported from dubainest-ai/backend/app (api/properties.py and
-services/property_service.py), including the MEDIA_BASE_URL rewrite.
-
-One change: the catalogue is 20 items, so instead of a GSI query per request
-each instance scans the table once, keeps it for PROPERTIES_CACHE_SECONDS
-(default 60), and filters in Python. The agent does the same at container start
-(spec §7). Results and their order are the same as before: sorted by price.
+Photo file names are prefixed with MEDIA_BASE_URL. The catalogue is 20 items,
+so instead of a query per request each instance scans the table once, keeps it
+for PROPERTIES_CACHE_SECONDS (default 60), and filters in Python. The agent does
+the same at container start. Results are sorted by price.
 """
 
 from __future__ import annotations
@@ -31,7 +28,7 @@ _FLOAT_FIELDS = {"roi", "lat", "lng"}
 
 
 # ── DynamoDB item → Property ──────────────────────────────────────────────────
-# Key schema (owned by dubainest-ai's DataStack): PK propertyId; price is priceAed.
+# Key schema: PK propertyId; price is priceAed.
 def item_to_property(item: dict[str, Any]) -> Property:
     data = dict(item)
     data["id"] = data.pop("propertyId")

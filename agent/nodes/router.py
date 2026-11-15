@@ -14,7 +14,7 @@ from .fixed import NEGATIVE
 
 log = logging.getLogger(__name__)
 
-# Ported from dubainest-ai orchestrator.py, with a few words added. Order = priority.
+# Keyword routing: the fallback when the model router fails or isn't confident. Order = priority.
 _KEYWORDS: list[tuple[Intent, tuple[str, ...]]] = [
     (
         "scheduler",

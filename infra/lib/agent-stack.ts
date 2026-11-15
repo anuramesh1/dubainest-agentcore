@@ -8,7 +8,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import { Construct } from "constructs";
 
 export interface AgentStackProps extends cdk.StackProps {
-  // Shared with dubainest-ai (spec §13 decision 5): referenced by name only.
+  // Created outside CDK (see the README): referenced by name only.
   readonly propertiesTableName: string;
   readonly leadsTableName: string;
   readonly isProd?: boolean;
