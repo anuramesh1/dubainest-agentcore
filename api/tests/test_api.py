@@ -148,12 +148,36 @@ def test_enquiry_saved_to_leads(client):
     assert lead["createdAt"].startswith(body["created_at"][:19])
 
 
+def test_enquiry_needs_only_name_and_email(client):
+    r = client.post(
+        "/api/enquiries",
+        json={"property_id": "10", "name": "Test Buyer", "email": "buyer@example.com"},
+    )
+    assert r.status_code == 201
+    lead = (
+        boto3.resource("dynamodb", region_name="us-east-1")
+        .Table("leads-test")
+        .get_item(Key={"leadId": r.json()["id"]})["Item"]
+    )
+    assert "phone" not in lead and "message" not in lead  # optional, not stored empty
+    blank = {
+        "property_id": "10",
+        "name": "B",
+        "email": "b@example.com",
+        "phone": " ",
+        "message": "",
+    }
+    assert client.post("/api/enquiries", json=blank).status_code == 201
+
+
 @pytest.mark.parametrize(
     "change",
     [
         {"property_id": "999"},
         {"email": "not-an-email"},
+        {"email": ""},
         {"name": "   "},
+        {"phone": "abc"},
         {"message": "x" * 2001},
     ],
 )

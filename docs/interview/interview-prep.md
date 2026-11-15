@@ -69,6 +69,26 @@ sequenceDiagram
 | Data | DynamoDB on demand, S3 | No servers, pennies at this traffic |
 | IaC | AWS CDK (TypeScript) | Same language as the original project; L1 `CfnRuntime` covers AgentCore |
 
+### The agents: five Strands agents, one runtime
+
+| Agent | Answers | Tools |
+| --- | --- | --- |
+| **Property agent** | finding, describing and comparing listings | `search_listings`, `get_listing`, `compare_listings` |
+| **Market agent** | areas, trends, Golden Visa, buying rules | `area_market`, `get_listing` |
+| **ROI agent** | yield, mortgage, cash flow, payback | `calculate_roi`, `search_listings`, `get_listing` |
+| **Viewing agent** | arranging a viewing | `request_viewing`, `get_listing` |
+| **General agent** | greetings, what DubaiNest can do | `catalogue_overview`, `get_listing` |
+
+All five use Claude Haiku 4.5 with their own role text (`prompts.ROLES`) and toolset (`TOOLS_BY_INTENT` in [tools.py](../../agent/specialists/tools.py)); 7 tools in all, `get_listing` shared by every agent.
+
+**Not agents** (no tool choice, no loop):
+- **Router:** one Nova Micro call that picks the intent; a keyword rule takes over on failure or low confidence.
+- **Output gate:** code that checks every sentence before it is sent.
+- **`confirm_viewing` and `off_topic`:** fixed replies, no model call ([fixed.py](../../agent/nodes/fixed.py)).
+- **`load_memory` and `remember`:** code that reads and writes the profile and the conversation.
+
+**How they run:** one agent answers each question, chosen by the router. A question needing two kinds of answer ("2BR in Business Bay and their yields") gets one agent with both toolsets, not two agents and a merge. A fresh agent is built per question with the conversation passed in. All five live in one LangGraph graph, deployed as **one** AgentCore Runtime, so AWS has one runtime, not five.
+
 ---
 
 ## 3. Decisions and trade-offs
@@ -332,40 +352,41 @@ Good material for "tell me about a hard bug" questions. Each one has a symptom, 
 
 **Architecture**
 
-1. *Why AgentCore instead of Lambda for the agents?* Lambda caps at 15 minutes and isn't session-aware; AgentCore gives an isolated microVM per session, keeps it warm between turns of the same chat (5-minute idle timeout), and is designed for long-running streaming agents. Lambda is still the right tool for the thin API: guardrails and caps run there before any paid compute.
-2. *Why not let the browser call AgentCore?* `InvokeAgentRuntime` needs SigV4 or a JWT authorizer. The Lambda is also where free checks run, so blocked or capped questions never wake AgentCore.
-3. *How does streaming work end to end?* Async generator in the agent → SDK emits SSE → `invoke_agent_runtime` stream → Lambda reads with `read1` and yields bytes → Lambda Web Adapter in `response_stream` mode → Function URL `RESPONSE_STREAM` → CloudFront → `fetch` reader in the browser.
-4. *Why both LangGraph and Strands?* Different jobs. LangGraph is the deterministic part: routing, state, memory, confirmation flow, guardrails; it's easy to test and reason about. Strands is the agentic part: each specialist decides which tools to call. Using Strands everywhere would hand control flow to the model; using only LangGraph means hand-writing tool loops.
-5. *How would you add a new agent, say mortgage pre-approval?* Add tools to `ToolBox`, a role in `prompts.ROLES`, an entry in `TOOLS_BY_INTENT` and `AGENT_NODES`, a router intent and labelled routing eval cases. The graph picks it up; tests use the fake agent.
+1. *How many agents are there?* Five specialist Strands agents (property, market, ROI, viewing, general) in one LangGraph graph on one AgentCore Runtime. A cheap Nova Micro router picks one per question; LangGraph controls routing, memory and the output gate around them. The router, the gate and the fixed replies aren't agents: none of them chooses tools or loops. See [§2, The agents](#the-agents-five-strands-agents-one-runtime).
+2. *Why AgentCore instead of Lambda for the agents?* Lambda caps at 15 minutes and isn't session-aware; AgentCore gives an isolated microVM per session, keeps it warm between turns of the same chat (5-minute idle timeout), and is designed for long-running streaming agents. Lambda is still the right tool for the thin API: guardrails and caps run there before any paid compute.
+3. *Why not let the browser call AgentCore?* `InvokeAgentRuntime` needs SigV4 or a JWT authorizer. The Lambda is also where free checks run, so blocked or capped questions never wake AgentCore.
+4. *How does streaming work end to end?* Async generator in the agent → SDK emits SSE → `invoke_agent_runtime` stream → Lambda reads with `read1` and yields bytes → Lambda Web Adapter in `response_stream` mode → Function URL `RESPONSE_STREAM` → CloudFront → `fetch` reader in the browser.
+5. *Why both LangGraph and Strands?* Different jobs. LangGraph is the deterministic part: routing, state, memory, confirmation flow, guardrails; it's easy to test and reason about. Strands is the agentic part: each specialist decides which tools to call. Using Strands everywhere would hand control flow to the model; using only LangGraph means hand-writing tool loops.
+6. *How would you add a new agent, say mortgage pre-approval?* Add tools to `ToolBox`, a role in `prompts.ROLES`, an entry in `TOOLS_BY_INTENT` and `AGENT_NODES`, a router intent and labelled routing eval cases. The graph picks it up; tests use the fake agent.
 
 **Reliability and quality**
 
-6. *How do you prevent hallucinated prices?* Three layers: prompts (figures only from tools, no arithmetic), tools that pre-compute every derived number, and the output gate that checks each sentence before release and stops the stream on a mismatch. The grounding eval requires 20/20 with zero blocks.
-7. *What happens if Bedrock throttles or a model fails?* Router failure → keyword router. Agent failure → the stream ends with a safe `error` event. Relay failure → a safe error; already-sent text stays. Memory failure → logged, the answer continues without memory.
-8. *How do you test an LLM system without calling the LLM?* Dependency injection at two seams (`classify`, `make_agent`). The fake Strands agent replays scripted events but calls the real tools, so everything except the model is exercised. Then evals against real Bedrock measure what the model does.
-9. *What do your evals measure and what are the gates?* Routing accuracy ≥ 90% (44/44), grounding 20/20 with no gate blocks, ≤ 4 model calls on 95% (100%), memory 5/5. Results are saved as JSON for comparison across changes.
+7. *How do you prevent hallucinated prices?* Three layers: prompts (figures only from tools, no arithmetic), tools that pre-compute every derived number, and the output gate that checks each sentence before release and stops the stream on a mismatch. The grounding eval requires 20/20 with zero blocks.
+8. *What happens if Bedrock throttles or a model fails?* Router failure → keyword router. Agent failure → the stream ends with a safe `error` event. Relay failure → a safe error; already-sent text stays. Memory failure → logged, the answer continues without memory.
+9. *How do you test an LLM system without calling the LLM?* Dependency injection at two seams (`classify`, `make_agent`). The fake Strands agent replays scripted events but calls the real tools, so everything except the model is exercised. Then evals against real Bedrock measure what the model does.
+10. *What do your evals measure and what are the gates?* Routing accuracy ≥ 90% (44/44), grounding 20/20 with no gate blocks, ≤ 4 model calls on 95% (100%), memory 5/5. Results are saved as JSON for comparison across changes.
 
 **Memory**
 
-10. *Short-term vs long-term memory here?* Conversation = LangGraph checkpointer (`DynamoDBSaver`), keyed by chat session, 24 h. Long-term = LangGraph store (`DynamoDBStore`), keyed by an anonymous visitor ID, 90 days. A fresh microVM reads both, so memory survives cold starts.
-11. *Why not AgentCore Memory?* It bills per event and adds a service for a single-tab chat; DynamoDB on demand costs fractions of a cent here and works through LangGraph's standard interfaces. AgentCore Memory would be worth it for semantic long-term memory across many sessions.
-12. *Privacy?* No login; the visitor ID is random and local to the browser. The profile stores preferences and a first name only, never email or phone; contact details go to Leads only after an explicit "yes". IPs for rate limiting are salted hashes with a 10-minute TTL.
+11. *Short-term vs long-term memory here?* Conversation = LangGraph checkpointer (`DynamoDBSaver`), keyed by chat session, 24 h. Long-term = LangGraph store (`DynamoDBStore`), keyed by an anonymous visitor ID, 90 days. A fresh microVM reads both, so memory survives cold starts.
+12. *Why not AgentCore Memory?* It bills per event and adds a service for a single-tab chat; DynamoDB on demand costs fractions of a cent here and works through LangGraph's standard interfaces. AgentCore Memory would be worth it for semantic long-term memory across many sessions.
+13. *Privacy?* No login; the visitor ID is random and local to the browser. The profile stores preferences and a first name only, never email or phone; contact details go to Leads only after an explicit "yes". IPs for rate limiting are salted hashes with a 10-minute TTL.
 
 **Security**
 
-13. *Prompt injection?* Layers. Typed attempts: a regex screen in the Lambda (free, catches the obvious, answers with a calm non-accusatory line because it has false positives), the router sends role-change paraphrases to the fixed off-topic reply, the agents' rules never reveal the instructions, and five screened prompts in ten minutes put that IP in a cooldown where nothing reaches an agent. The more important part is limiting what a compromised agent could *do*: tools are read-only except one that only *holds* a viewing request, contact details must appear in the user's own words, no tool sends email or browses, and the gate checks every figure. That also covers indirect injection through listing text. A Bedrock Guardrail is the next step if this went fully public.
-14. *Least privilege?* The Lambda can invoke one runtime, read Properties, write Leads and its counters. The agent role can call three models, Scan one table, PutItem one table, read one S3 object and use its two memory tables. The Function URL only accepts CloudFront-signed requests.
+14. *Prompt injection?* Layers. Typed attempts: a regex screen in the Lambda (free, catches the obvious, answers with a calm non-accusatory line because it has false positives), the router sends role-change paraphrases to the fixed off-topic reply, the agents' rules never reveal the instructions, and five screened prompts in ten minutes put that IP in a cooldown where nothing reaches an agent. The more important part is limiting what a compromised agent could *do*: tools are read-only except one that only *holds* a viewing request, contact details must appear in the user's own words, no tool sends email or browses, and the gate checks every figure. That also covers indirect injection through listing text. A Bedrock Guardrail is the next step if this went fully public.
+15. *Least privilege?* The Lambda can invoke one runtime, read Properties, write Leads and its counters. The agent role can call three models, Scan one table, PutItem one table, read one S3 object and use its two memory tables. The Function URL only accepts CloudFront-signed requests.
 
 **Cost and scale**
 
-15. *What does it cost?* ≈ $0.007 per question; idle ≈ $0.10–0.30/month. Worst case is bounded by the daily cap (200 × ≈ $0.0066 ≈ $1.30/day) and reserved concurrency 3.
-16. *What breaks at 1,000× traffic?* Reserved concurrency and the daily cap (by design; raise them). The NumPy index is fine to tens of thousands of listings; beyond that, S3 Vectors. Listings are scanned once per microVM; with a big catalogue, query DynamoDB or OpenSearch instead. Bedrock quotas would need increases.
-17. *Cold starts?* 6–10 s to first text for the first question after idle (Lambda and a new microVM start, imports, DynamoDB scan, index load); once warm, even a new chat starts streaming in ~3.6 s. Options: keep a session warm with a scheduled ping (costs a little), slim the image, lazy-load the index (already done), or show progress (the `status` events do).
+16. *What does it cost?* ≈ $0.007 per question; idle ≈ $0.10–0.30/month. Worst case is bounded by the daily cap (200 × ≈ $0.0066 ≈ $1.30/day) and reserved concurrency 3.
+17. *What breaks at 1,000× traffic?* Reserved concurrency and the daily cap (by design; raise them). The NumPy index is fine to tens of thousands of listings; beyond that, S3 Vectors. Listings are scanned once per microVM; with a big catalogue, query DynamoDB or OpenSearch instead. Bedrock quotas would need increases.
+18. *Cold starts?* 6–10 s to first text for the first question after idle (Lambda and a new microVM start, imports, DynamoDB scan, index load); once warm, even a new chat starts streaming in ~3.6 s. Options: keep a session warm with a scheduled ping (costs a little), slim the image, lazy-load the index (already done), or show progress (the `status` events do).
 
 **Process**
 
-18. *What would you do differently?* Start with the output gate and memory designed in from step 3, not added after; add observability (dashboards on cost per question and gate blocks) earlier; write the streaming relay test before the first deploy.
-19. *What's still missing?* Market data is dated notes, not live DLD data; no LLM-as-judge answer-quality eval yet; observability stack not deployed; old dubainest-ai stacks to be destroyed (step 8) and a 7-day cost check.
+19. *What would you do differently?* Start with the output gate and memory designed in from step 3, not added after; add observability (dashboards on cost per question and gate blocks) earlier; write the streaming relay test before the first deploy.
+20. *What's still missing?* Market data is dated notes, not live DLD data; no LLM-as-judge answer-quality eval yet; observability stack not deployed; old dubainest-ai stacks to be destroyed (step 8) and a 7-day cost check.
 
 ---
 

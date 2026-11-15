@@ -30,6 +30,8 @@ export class PropertyDetailComponent {
   showEnquiry = signal(false);
   enquiryForm = signal({ name: "", email: "", phone: "", message: "" });
   enquirySent = signal(false);
+  enquirySending = signal(false);
+  enquiryError = signal("");
 
   formatPrice(price: number): string {
     if (price >= 1_000_000) return `AED ${(price / 1_000_000).toFixed(2)}M`;
@@ -43,40 +45,57 @@ export class PropertyDetailComponent {
   openEnquiry() {
     this.showEnquiry.set(true);
     this.enquirySent.set(false);
+    this.enquiryError.set("");
   }
 
   closeEnquiry() {
     this.showEnquiry.set(false);
   }
 
+  /** Name and a plausible email are required; phone and message are optional. */
+  canSubmitEnquiry = computed(() => {
+    const f = this.enquiryForm();
+    return (
+      f.name.trim().length > 0 &&
+      /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim()) &&
+      !this.enquirySending()
+    );
+  });
+
   submitEnquiry() {
     const form = this.enquiryForm();
     const propertyId = this.id();
-    if (
-      !form.name ||
-      !form.email ||
-      !form.phone ||
-      !form.message ||
-      !propertyId
-    ) {
-      console.error("Incomplete form");
+    if (!propertyId || !this.canSubmitEnquiry()) {
+      this.enquiryError.set(
+        "Please enter your name and a valid email address.",
+      );
       return;
     }
 
     const payload = {
       property_id: propertyId,
-      name: form.name,
-      email: form.email,
-      phone: form.phone,
-      message: form.message,
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      message: form.message.trim(),
     };
 
+    this.enquirySending.set(true);
+    this.enquiryError.set("");
     this.http.post(`${environment.apiUrl}/api/enquiries`, payload).subscribe({
       next: () => {
+        this.enquirySending.set(false);
         this.enquirySent.set(true);
+        this.enquiryForm.set({ name: "", email: "", phone: "", message: "" });
         setTimeout(() => this.closeEnquiry(), 2000);
       },
       error: (err) => {
+        this.enquirySending.set(false);
+        this.enquiryError.set(
+          err?.status === 422
+            ? "Please check your details: a valid email, and a phone number with at least 6 digits if you add one."
+            : "Sorry, your enquiry couldn't be sent. Please try again in a moment.",
+        );
         console.error("Enquiry submission failed:", err);
       },
     });

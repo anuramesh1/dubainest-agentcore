@@ -41,20 +41,34 @@ class Facets(BaseModel):
 
 
 class EnquiryCreate(BaseModel):
-    """The enquiry form on the detail page. Limits keep a public endpoint cheap to abuse-proof."""
+    """The enquiry form on the detail page. Name and email are required (email is
+    how the team replies); phone and message are optional, as the form says.
+    Limits keep a public endpoint cheap to abuse-proof."""
 
     property_id: str = Field(min_length=1, max_length=20)
     name: str = Field(min_length=1, max_length=100)
     email: str = Field(min_length=3, max_length=200)
-    phone: str = Field(min_length=3, max_length=40)
-    message: str = Field(min_length=1, max_length=2000)
+    phone: str = Field(default="", max_length=40)
+    message: str = Field(default="", max_length=2000)
 
-    @field_validator("name", "email", "phone", "message")
+    @field_validator("name", "email")
     @classmethod
     def not_blank(cls, v: str) -> str:
         v = v.strip()
         if not v:
             raise ValueError("must not be blank")
+        return v
+
+    @field_validator("phone", "message")
+    @classmethod
+    def trimmed(cls, v: str) -> str:
+        return v.strip()
+
+    @field_validator("phone")
+    @classmethod
+    def looks_like_phone(cls, v: str) -> str:
+        if v and sum(c.isdigit() for c in v) < 6:
+            raise ValueError("not a valid phone number")
         return v
 
     @field_validator("email")

@@ -37,8 +37,9 @@ def create_enquiry(enquiry: EnquiryCreate) -> EnquiryRead:
             "source": "enquiry_form",
             "name": record.name,
             "email": record.email,
-            "phone": record.phone,
-            "message": record.message,
+            # optional fields are stored only when given
+            **({"phone": record.phone} if record.phone else {}),
+            **({"message": record.message} if record.message else {}),
         },
         ConditionExpression="attribute_not_exists(leadId)",
     )
