@@ -40,6 +40,16 @@ _PURPOSE = (
     ),
     ("live", re.compile(r"\b(live in|move in|family home|for my family|to live|relocat)", re.I)),
 )
+# The remembered budget is shared with the agent only when the question is about it:
+# "Tell me about Chelsea Residences" must not be judged against an old budget.
+_BUDGET_ASK = re.compile(
+    r"\b(budget|afford\w*|price range|within my|my (price|range|limit|max)|can i (buy|get))\b",
+    re.I,
+)
+
+
+def mentions_budget(prompt: str) -> bool:
+    return bool(_BUDGET_ASK.search(prompt or ""))
 
 
 def checkpointer() -> BaseCheckpointSaver:
@@ -104,16 +114,19 @@ def update_profile(
     return p
 
 
-def describe(profile: dict[str, Any] | None) -> str:
-    """One line for the agent's context, e.g. 'budget up to AED 3,000,000; Dubai Marina'."""
+def describe(profile: dict[str, Any] | None, *, with_budget: bool = True) -> str:
+    """One line for the agent's context, e.g. 'budget up to AED 3,000,000; Dubai Marina'.
+
+    with_budget=False leaves the budget out (the question doesn't ask about it).
+    """
     if not profile:
         return ""
     parts = []
     if n := profile.get("first_name"):
         parts.append(f"name {n}")
-    if v := profile.get("budget_max_aed"):
+    if with_budget and (v := profile.get("budget_max_aed")):
         parts.append(f"budget up to AED {v:,}")
-    if v := profile.get("budget_min_aed"):
+    if with_budget and (v := profile.get("budget_min_aed")):
         parts.append(f"budget from AED {v:,}")
     if v := profile.get("bedrooms"):
         parts.append(f"{v} bedrooms")

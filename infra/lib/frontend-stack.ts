@@ -97,6 +97,27 @@ function handler(event) {
 }`),
     });
 
+    // What /api/* forwards to the Lambda: just what the api reads, plus the
+    // visitor's address for the per-IP cap. (x-amz-content-sha256 may not be
+    // listed here; origin access control uses it for signing on its own.) CloudFront-Viewer-Address is set by
+    // CloudFront (a client cannot fake it, unlike X-Forwarded-For), and managed
+    // "all viewer headers" policies don't include CloudFront's own headers.
+    const apiOriginRequest = new cloudfront.OriginRequestPolicy(
+      this,
+      "ApiOriginRequest",
+      {
+        originRequestPolicyName: `DubaiNestAgentCore-Api-${env}`,
+        comment: "api Lambda: body headers and the viewer address",
+        headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
+          "content-type",
+          "accept",
+          "CloudFront-Viewer-Address",
+        ),
+        queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
+        cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
+      },
+    );
+
     // CloudFront distribution
     this.distribution = new cloudfront.Distribution(this, "Distribution", {
       comment: `DubaiNest AgentCore frontend — ${env}`,
@@ -132,8 +153,7 @@ function handler(event) {
             cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-          originRequestPolicy:
-            cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          originRequestPolicy: apiOriginRequest,
         },
       },
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,

@@ -12,7 +12,7 @@ Paste a 1-paragraph summary at the **end of each Claude session** so the next se
 **Status:** ⏳ Built + verified LOCALLY. Backend fix committed/pushed but NOT on ECS. Markdown fix uncommitted. Testing locally before deploy.
 
 ### ⚠️ DEPLOYMENT STATUS — live vs local (READ BEFORE NEXT DEPLOY)
-- **Live demo** (`https://d2b0qbg7jln8ob.cloudfront.net`): currently UP (compute billing).
+- **Live demo** (`https://<old-demo>.cloudfront.net`): currently UP (compute billing).
   - Frontend: NEW chat UI deployed (intro + suggestion chips) BUT with the markdown-render bug (see below).
   - Backend ECS: **OLD image** — the `system`/user-split fix (commit `433d466`) is NOT deployed, so **live chat is still guardrail-blocked**. A backend image deploy was deliberately stopped mid-build; no partial state (ECS still on prior image, 1/1 healthy, BackendStack UPDATE_COMPLETE).
   - Guardrail on AWS: **already updated** via cdk (no denied topics, PROMPT_ATTACK=HIGH).
@@ -52,7 +52,7 @@ Chat bubbles only routed through the markdown renderer when content had `#` or `
 **Status:** ✅ Done + verified via a full down→up→down cycle. Commit `44c294e` on `develop` (pushed). Demo currently STOPPED.
 
 ### Demo URL (stable across stop/start)
-**https://d2b0qbg7jln8ob.cloudfront.net** — Angular SPA on CloudFront; `/api/*` proxied to the backend ALB. Same URL every cycle.
+**https://<old-demo>.cloudfront.net** — Angular SPA on CloudFront; `/api/*` proxied to the backend ALB. Same URL every cycle.
 
 ### What landed
 - **Frontend deployed (FrontendStack).** Added `frontend/src/environments/environment.prod.ts` (`apiUrl: ""`, relative) + `angular.json` `fileReplacements`, so the SPA calls same-origin `/api/*` (CloudFront proxies to ALB) — no hardcoded ALB DNS in the client. Verified bundle has `apiUrl:""` and zero localhost. NOTE: prod dist path is `frontend/dist/dubainest-frontend/browser` (project renamed; fixed in `deploy.sh`).

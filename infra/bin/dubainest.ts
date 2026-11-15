@@ -49,22 +49,25 @@ const stackProps: cdk.StackProps = { env };
 
 // ── Stacks ────────────────────────────────────────────────────────────────────
 
-const api = new ApiStack(app, "DubaiNestAgentCoreApiStack", {
-  ...stackProps,
-  isProd,
-  propertiesTableName,
-  leadsTableName,
-  mediaBaseUrl,
-  description: "DubaiNest AgentCore — api Lambda (Function URL, streaming)",
-});
-
-new AgentStack(app, "DubaiNestAgentCoreAgentStack", {
+const agent = new AgentStack(app, "DubaiNestAgentCoreAgentStack", {
   ...stackProps,
   isProd,
   propertiesTableName,
   leadsTableName,
   description:
     "DubaiNest AgentCore — LangGraph + Strands agents on AgentCore Runtime, DynamoDB memory",
+});
+
+const api = new ApiStack(app, "DubaiNestAgentCoreApiStack", {
+  ...stackProps,
+  isProd,
+  propertiesTableName,
+  leadsTableName,
+  mediaBaseUrl,
+  agentRuntimeArn: agent.runtime.attrAgentRuntimeArn,
+  dailyQuestionCap: Number(app.node.tryGetContext("dailyQuestionCap") ?? "200"),
+  perIpPerMinute: Number(app.node.tryGetContext("perIpPerMinute") ?? "20"),
+  description: "DubaiNest AgentCore — api Lambda (Function URL, streaming)",
 });
 
 new FrontendStack(app, "DubaiNestAgentCoreFrontendStack", {

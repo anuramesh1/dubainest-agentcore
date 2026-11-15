@@ -3,7 +3,7 @@
 #
 #   scripts/deploy.sh             # everything below
 #   scripts/deploy.sh --agent     # AgentStack (AgentCore Runtime), upload the index, test a stream
-#   scripts/deploy.sh --infra     # ApiStack + FrontendStack only
+#   scripts/deploy.sh --infra     # ApiStack + FrontendStack (+ AgentStack, which ApiStack needs)
 #   scripts/deploy.sh --site      # rebuild + upload the UI only
 #
 # Needs: AWS credentials for the account, Docker running (the api and agent
@@ -65,6 +65,18 @@ if [[ "$MODE" == "all" || "$MODE" == "--site" ]]; then
   aws cloudfront create-invalidation --distribution-id "$DIST" --paths '/*' \
     --query 'Invalidation.Id' --output text
 fi
+
+# Live URLs and ids stay out of git: written to .deploy/ (gitignored), not printed
+# into any tracked file. Read them with: cat .deploy/outputs.env
+mkdir -p "$ROOT/.deploy"
+{
+  echo "# written by scripts/deploy.sh on $(date -u +%Y-%m-%dT%H:%MZ); gitignored"
+  for pair in "$SITE_STACK:CloudFrontDomain:SITE_URL" "$SITE_STACK:DistributionId:DISTRIBUTION_ID" \
+              "$AGENT_STACK:AgentRuntimeArn:AGENT_RUNTIME_ARN"; do
+    IFS=: read -r stack key name <<<"$pair"
+    echo "$name=$(output "$stack" "$key" 2>/dev/null)"
+  done
+} > "$ROOT/.deploy/outputs.env"
 
 if [[ "$MODE" != "--agent" ]]; then
   "$ROOT/scripts/smoke.sh" "$(output "$SITE_STACK" CloudFrontDomain)"

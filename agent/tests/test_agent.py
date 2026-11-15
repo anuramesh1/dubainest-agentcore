@@ -379,6 +379,17 @@ def test_long_term_memory_follows_the_visitor():
     assert "Known about this visitor" not in factory.made[2].prompt
 
 
+def test_remembered_budget_only_when_the_question_asks():
+    profile = {"budget_max_aed": 2_000_000, "property_types": ["villa"], "first_name": "Sara"}
+    for q in ("Tell me about Chelsea Residences", "What's the yield on Burj Vista?"):
+        assert not memory.mentions_budget(q)
+    for q in ("Anything in my budget?", "Can I afford Burj Vista?", "within my price range"):
+        assert memory.mentions_budget(q)
+    without = memory.describe(profile, with_budget=False)
+    assert "budget" not in without and "Sara" in without and "villa" in without
+    assert "budget up to AED 2,000,000" in memory.describe(profile)
+
+
 def test_update_profile_merges_and_keeps_newest():
     p = memory.update_profile({}, "villa in Palm under 10M for my family")
     p = memory.update_profile(p, "or Dubai Hills, budget up to 8M")

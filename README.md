@@ -10,7 +10,7 @@ The DubaiNest AI real-estate chatbot, rebuilt to cost almost nothing while idle.
 | Agent hosting | Amazon Bedrock AgentCore Runtime |
 | Memory | DynamoDB: LangGraph checkpointer (conversation) + store (visitor profile) |
 
-The design is in [`docs/00-spec.md`](docs/00-spec.md). This repo is built step by step following its §11.
+The design is in [`docs/00-spec.md`](docs/00-spec.md). Architecture diagram, interview prep and a demo script: [`docs/interview/`](docs/interview/). This repo is built step by step following its §11.
 
 ## Build status
 
@@ -22,8 +22,8 @@ The design is in [`docs/00-spec.md`](docs/00-spec.md). This repo is built step b
 | 4 | Chat relay (local) + `scripts/build_index.py` | ✅ done |
 | 5 | CDK: api Lambda + Function URL behind CloudFront | ✅ done |
 | 6 | AgentCore Runtime (Strands agents + DynamoDB memory) | ✅ done |
-| 7 | Relay wired to AgentCore, caps, budget | next |
-| 8 | Destroy the old backend stacks, 7-day cost check | |
+| 7 | Relay wired to AgentCore, caps, budget | ✅ done |
+| 8 | Destroy the old backend stacks, 7-day cost check | next |
 
 ## Layout (now)
 
@@ -125,7 +125,7 @@ Market figures in [data/area_stats.json](data/area_stats.json) are the notes car
 .venv/bin/python -m evals memory -v
 ```
 
-Last run: routing 40/40, grounding 20/20 (output gate blocked nothing), every question in 4 model calls or fewer (median 3), about 5,850 input / 340 output tokens and **$0.0066 per question**, 3.3 s average; memory 5/5 (a follow-up with no browser history, a viewing confirmed by "yes", the budget recalled in a new session).
+Last run: routing 44/44, grounding 20/20 (output gate blocked nothing), every question in 4 model calls or fewer (median 3), about 5,850 input / 340 output tokens and **$0.0066 per question**, 3.3 s average; memory 5/5 (a follow-up with no browser history, a viewing confirmed by "yes", the budget recalled in a new session).
 
 ## Tests and checks
 
@@ -148,13 +148,15 @@ browser ─▶ CloudFront ─┬─ /*      ─▶ S3 (Angular build)
 - **api Lambda** ([infra/lib/api-stack.ts](infra/lib/api-stack.ts)): the same FastAPI app as local, packaged by [api/Dockerfile](api/Dockerfile) (arm64, Python 3.12, Lambda Web Adapter so `POST /api/chat` streams). 512 MB, 60 s timeout, reserved concurrency 3, logs kept 7 days. Its role can scan Properties and put items in Leads, nothing else.
 - **Function URL is IAM-only.** CloudFront signs every `/api/*` request (origin access control), so the URL can't be called directly. Lambda needs a body hash on signed POSTs, which CloudFront can't compute, so the UI sends `x-amz-content-sha256` itself ([signed-body.ts](frontend/src/app/services/signed-body.ts)).
 - **SPA routing** is a CloudFront Function on the S3 behaviour (paths without a file extension → `index.html`), not distribution-wide error pages, so the api's 403/404 reach the browser as JSON.
-- **Chat on AWS** answers with a polite `error` event until step 7 wires the relay to AgentCore (the agent isn't in the api image). Local chat is unchanged.
+- **Chat on AWS** (step 7): guard_in, then the caps, then `InvokeAgentRuntime` on the one runtime the Lambda may call. AgentCore's SSE bytes are passed through unchanged as they arrive (read with `read1()`), with a fresh AgentCore session per chat window (`dubainest-<session_id>`).
+- **Caps** ([api/limits.py](api/limits.py)): 20 questions a minute per visitor IP and 200 a day for the whole site (about $1.30/day worst case), as atomic counters in `dubainest-agentcore-limits-<env>`. IPs are stored only as a salted hash, taken from `CloudFront-Viewer-Address` (set by CloudFront; `X-Forwarded-For` is never trusted). A capped question gets a polite reply and never wakes AgentCore. Change with `-c dailyQuestionCap=… -c perIpPerMinute=…`.
+- **Budget**: the account already has a $10/month cost budget with email alerts; the optional project budget is in ObservabilityStack.
 - **Idle cost:** the api image in ECR (~0.3 GB, about $0.03/month); Lambda, CloudFront and S3 sit in free tiers at this traffic.
 
 ```bash
 scripts/deploy.sh            # needs Docker running (REQUIRE_APPROVAL=never skips CDK's IAM prompt when there's no terminal): cdk deploy Api + Frontend stacks, upload UI, invalidate, smoke test
 scripts/deploy.sh --site     # UI only
-scripts/smoke.sh https://<distribution>.cloudfront.net   # read-only checks
+scripts/smoke.sh             # checks the live site; its URL is in .deploy/outputs.env (gitignored)
 ```
 
 ## The agent on AgentCore Runtime (step 6)

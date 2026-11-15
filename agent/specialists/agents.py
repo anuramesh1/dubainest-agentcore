@@ -92,7 +92,8 @@ def user_message(state: AgentState) -> str:
     if pc := state.get("property_context"):
         brief = {k: pc[k] for k in ("id", "title", "area", "price_aed", "link") if k in pc}
         parts.append(f"Listing open in the UI: {json.dumps(brief, ensure_ascii=False)}")
-    if known := memory.describe(state.get("profile")):
+    with_budget = memory.mentions_budget(state["prompt"])
+    if known := memory.describe(state.get("profile"), with_budget=with_budget):
         parts.append(f"Known about this visitor from earlier visits: {known}")
     parts.append(f"Question: {state['prompt']}")
     return "\n".join(parts)

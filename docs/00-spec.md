@@ -30,7 +30,7 @@ The Angular app is copied unchanged, so the new backend must serve the same six 
 **Also kept:**
 
 - The assets bucket `dubainest-assets-ACCOUNT-us-east-1` and its CloudFront distribution for builder photos. The `MEDIA_BASE_URL` rewrite in `properties.py` moves into the api Lambda as is.
-- The frontend bucket and distribution `d2b0qbg7jln8ob.cloudfront.net`, or a fresh copy for the new project (§13).
+- The frontend bucket and distribution (its URL is kept out of this repo), or a fresh copy for the new project (§13).
 - DynamoDB on-demand tables for Properties, Leads and Conversations. These already cost nothing at rest.
 - The 20-property seed (`mock_properties.py`, `seed_properties.py`) and the regex prompt-injection screen in `agent_service.py`.
 - **One catalogue change, made in both projects:** listing id `10` was Emaar's "Act One Act Two — Downtown Dubai" (image `Act One Act Two — Downtown Dubai.jpeg`). It is now DAMAC's "DAMAC Islands — Dubailand", a 4-bedroom off-plan townhouse with handover in 2028, using the image `Damac islands.jpeg`, which is already in the assets bucket under `media/photos/`. The id stays the same, so links to `/property/10` still work. The seed is now DAMAC 7, Emaar 8, Nakheel 5. `Dubailand` is a new area, so it appears as a new option in the area filter. The change is made in `dubainest-ai/backend/app/data/mock_properties.py` and carries over when step 1 copies the seed. The deployed Properties table and the RAG index need a re-seed to pick it up.
@@ -222,7 +222,7 @@ Cheap checks run in the Lambda before any agent starts, so blocked or off-topic 
 
 **Guardrails**
 
-- **guard_in (api Lambda, free):** the existing regex injection screen, the 2,000-character cap, the daily cap and the per-IP limit.
+- **guard_in (api Lambda, free):** the regex injection screen (a calm, non-accusatory refusal; a visitor with 5 screened prompts in 10 minutes gets that refusal for everything until the window ends), the 2,000-character cap, the daily cap and the per-IP limit.
 - **off_topic route (graph, one Nova Micro call):** fixed reply, no agent runs.
 - **Output gate (graph, free):** every sentence an agent writes is checked before it is sent: its AED figures must come from this turn's tool results or the user's words. A failing sentence stops the stream (§5). Narration before tool calls never reaches the user.
 - **Tool limits:** each Strands agent is capped at 4 model turns; tools are read-only except `request_viewing`, which only holds a request.

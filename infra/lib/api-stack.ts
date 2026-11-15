@@ -13,6 +13,11 @@ export interface ApiStackProps extends cdk.StackProps {
   readonly leadsTableName: string;
   // e.g. https://<assets-cloudfront-domain>/media/photos (empty = no rewrite)
   readonly mediaBaseUrl: string;
+  // The AgentCore Runtime the chat relay invokes (AgentStack).
+  readonly agentRuntimeArn: string;
+  // Spending caps (spec §8)
+  readonly dailyQuestionCap?: number;
+  readonly perIpPerMinute?: number;
   readonly isProd?: boolean;
 }
 
@@ -24,6 +29,9 @@ export interface ApiStackProps extends cdk.StackProps {
  * control, wired in FrontendStack) may call it, so the public cannot bypass
  * CloudFront. No VPC, no ALB: nothing here bills while idle except the image
  * in ECR (~0.3 GB).
+ *
+ * Chat (step 7): guard_in, then the caps (a small on-demand counters table),
+ * then InvokeAgentRuntime on exactly one runtime, streamed back unchanged.
  */
 export class ApiStack extends cdk.Stack {
   public readonly fn: lambda.DockerImageFunction;
@@ -36,6 +44,15 @@ export class ApiStack extends cdk.Stack {
     const logGroup = new logs.LogGroup(this, "ApiLogs", {
       logGroupName: `/aws/lambda/dubainest-agentcore-api-${env}`,
       retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
+    // Atomic counters for the per-IP and daily caps (api/limits.py); TTL cleans up.
+    const limitsTable = new dynamodb.Table(this, "LimitsTable", {
+      tableName: `dubainest-agentcore-limits-${env}`,
+      partitionKey: { name: "pk", type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      timeToLiveAttribute: "expires_at",
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
@@ -58,8 +75,12 @@ export class ApiStack extends cdk.Stack {
         DYNAMODB_PROPERTIES_TABLE: props.propertiesTableName,
         DYNAMODB_LEADS_TABLE: props.leadsTableName,
         MEDIA_BASE_URL: props.mediaBaseUrl,
-        // The agent is not in this image; the AgentCore relay arrives in step 7.
+        // The agent is not in this image: chat is relayed to AgentCore Runtime.
         AGENT_MODE: "agentcore",
+        AGENT_RUNTIME_ARN: props.agentRuntimeArn,
+        LIMITS_TABLE: limitsTable.tableName,
+        DAILY_QUESTION_CAP: String(props.dailyQuestionCap ?? 200),
+        PER_IP_PER_MINUTE: String(props.perIpPerMinute ?? 20),
         // Same origin behind CloudFront, so no browser CORS is needed.
         ALLOWED_ORIGINS: "",
       },
@@ -85,6 +106,20 @@ export class ApiStack extends cdk.Stack {
       new iam.PolicyStatement({
         actions: ["dynamodb:PutItem"],
         resources: [leads.tableArn],
+      }),
+    );
+
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["dynamodb:UpdateItem"],
+        resources: [limitsTable.tableArn],
+      }),
+    );
+    // InvokeAgentRuntime on this runtime only (and its endpoints, e.g. DEFAULT).
+    this.fn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["bedrock-agentcore:InvokeAgentRuntime"],
+        resources: [props.agentRuntimeArn, `${props.agentRuntimeArn}/*`],
       }),
     );
 
