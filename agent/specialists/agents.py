@@ -114,7 +114,7 @@ def user_message(state: AgentState) -> str:
 async def run_specialist(state: AgentState, *, make: MakeAgent, node: str) -> dict[str, Any]:
     intents = list(state.get("intents") or ["general"])
     words = visitor_words(state)
-    box = ToolBox(words, state.get("property_context"))
+    box = ToolBox(words, state.get("property_context"), question=state["prompt"])
     agent = make(agent_system(intents), box.build(tool_names(intents)), strands_messages(state))
     gate = OutputGate(
         get_stream_writer(),

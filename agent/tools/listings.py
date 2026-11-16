@@ -231,6 +231,7 @@ def search(
     text: str = "",
     limit: int = 5,
     semantic: dict[str, float] | None = None,
+    also: tuple[str, dict[str, float] | None] | None = None,
 ) -> dict[str, Any]:
     """Apply filters; if nothing matches, relax price then bedrooms and say so.
 
@@ -265,7 +266,7 @@ def search(
 
     ranking = "price"
     if not any(k in filters for k in FILTER_KEYS):
-        ranked = hybrid_rank(text, semantic)
+        ranked = hybrid_rank(text, semantic, also)
         if ranked:
             rows, ranking = ranked, "hybrid" if semantic else "keyword"
 
@@ -312,12 +313,26 @@ def keyword_scores(text: str) -> dict[str, float]:
     return out
 
 
-def hybrid_rank(text: str, semantic: dict[str, float] | None = None) -> list[dict[str, Any]]:
-    """Vector similarity + KEYWORD_WEIGHT × keyword overlap. Keyword-only without an index."""
+def hybrid_rank(
+    text: str,
+    semantic: dict[str, float] | None = None,
+    also: tuple[str, dict[str, float] | None] | None = None,
+) -> list[dict[str, Any]]:
+    """Vector similarity + KEYWORD_WEIGHT × keyword overlap. Keyword-only without an index.
+
+    `also` is a second (text, semantic) pair, normally the visitor's own question
+    next to the model's search query; each listing keeps its better score, so a
+    paraphrase ("beach and lagoon living") can't drop a listing the visitor's
+    own words find.
+    """
     kw = keyword_scores(text)
     if not semantic:
         return [get(i) for i, _ in sorted(kw.items(), key=lambda t: -t[1])]  # type: ignore[misc]
     scores = {i: semantic.get(i, 0.0) + KEYWORD_WEIGHT * kw.get(i, 0.0) for i in semantic}
+    if also and also[1]:
+        kw2 = keyword_scores(also[0])
+        for i, s in also[1].items():
+            scores[i] = max(scores.get(i, 0.0), s + KEYWORD_WEIGHT * kw2.get(i, 0.0))
     best = sorted(scores.items(), key=lambda t: -t[1])
     return [get(i) for i, sc in best if sc >= MIN_HYBRID_SCORE and get(i)]  # type: ignore[misc]
 

@@ -453,6 +453,7 @@ def test_naming_a_listing_is_not_a_preference():
 def test_roi_returns_the_monthly_figures():
     r = roi.roi_numbers(1_850_000, 5.25, 994)
     assert r["monthly_rent_aed"] == round(r["annual_rent_aed"] / 12)
+    assert r["monthly_service_charges_aed"] == round(r["annual_service_charges_aed"] / 12)
     assert r["mortgage"]["monthly_cash_flow_aed"] * 12 == pytest.approx(
         r["mortgage"]["annual_cash_flow_aed"], abs=12
     )
@@ -504,6 +505,23 @@ def test_hybrid_rank_uses_vectors_and_keywords():
     assert ranked[0]["id"] == "10"
     r = listings.search({}, "beach and lagoon lifestyle", semantic=semantic)
     assert r["ranked_by"] == "hybrid" and r["listings"][0]["id"] == "10"
+
+
+def test_hybrid_rank_keeps_what_the_visitors_own_words_find():
+    # The model's paraphrase scores Palm Beach Towers (3) under the cut-off; the
+    # visitor's own question scores it above. The better score wins.
+    paraphrase = {"10": 0.158, "3": 0.05, "18": 0.10}
+    own_words = {"10": 0.20, "3": 0.15, "18": 0.05}
+    alone = [p["id"] for p in listings.hybrid_rank("beach and lagoon living", paraphrase)]
+    both = [
+        p["id"]
+        for p in listings.hybrid_rank(
+            "beach and lagoon living",
+            paraphrase,
+            also=("Something with a beach and lagoons for my family", own_words),
+        )
+    ]
+    assert "3" not in alone and both[:2] == ["10", "3"]
 
 
 def test_search_without_index_falls_back_to_keywords():

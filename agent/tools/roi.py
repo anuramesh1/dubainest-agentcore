@@ -44,6 +44,7 @@ def roi_numbers(
         "annual_rent_aed": round(rent),
         "monthly_rent_aed": round(rent / 12),
         "annual_service_charges_aed": round(service),
+        "monthly_service_charges_aed": round(service / 12),
         "net_annual_rent_aed": round(net),
         "monthly_net_rent_aed": round(net / 12),
         "net_yield_pct": round(net / price * 100, 2),

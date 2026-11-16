@@ -46,8 +46,11 @@ def _digits(s: str) -> str:
 class ToolBox:
     """Tools for one request, bound to what the user actually said."""
 
-    def __init__(self, user_text: str, open_listing: dict[str, Any] | None = None):
+    def __init__(
+        self, user_text: str, open_listing: dict[str, Any] | None = None, question: str = ""
+    ):
         self.user_text = user_text  # the visitor's own words: this turn + earlier turns
+        self.question = question  # this turn's question only, for search ranking
         self.open_listing = open_listing
         self.facts: dict[str, list[Any]] = {}
         self.seen_ids: list[str] = []
@@ -121,10 +124,22 @@ class ToolBox:
             named = [listings.summary(p) for p in listings.mentioned_listings(query)]
             semantic: dict[str, float] | None = None
             vec: dict[str, Any] = {}
+            also: tuple[str, dict[str, float] | None] | None = None
             if not named and not any(k in filters for k in listings.FILTER_KEYS):
                 hits, vec = vector_index.rank(query, min_score=0.0)
                 semantic = dict(hits) or None
-            result = listings.search(filters, query, semantic=semantic)
+                # Rank with the visitor's own question too, when it is a descriptive
+                # search in its own right (no filters) and differs from the query.
+                q = box.question.strip()
+                if (
+                    semantic
+                    and q
+                    and q.lower() != query.strip().lower()
+                    and not any(k in listings.parse_filters(q) for k in listings.FILTER_KEYS)
+                ):
+                    hits2, _ = vector_index.rank(q, min_score=0.0)
+                    also = (q, dict(hits2) or None)
+            result = listings.search(filters, query, semantic=semantic, also=also)
             if filters.get("unlisted_areas"):
                 result["not_in_catalogue"] = filters["unlisted_areas"]
             if named:
