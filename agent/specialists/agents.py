@@ -7,6 +7,7 @@ with the same stream_async() events, so they need no AWS.
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -87,6 +88,18 @@ def earlier_answers(state: AgentState) -> str:
     return "\n".join(t["content"] for t in history(state) if t.get("role") == "assistant")
 
 
+# Questions that ask for a decision get a one-line verdict after the table.
+_ASKS_VERDICT = re.compile(
+    r"\b(which|better|best|worth|should i|should we|compare|comparison|vs\.?|versus"
+    r"|recommend|choose|pick)\b",
+    re.I,
+)
+
+
+def asks_verdict(prompt: str) -> bool:
+    return bool(_ASKS_VERDICT.search(prompt or ""))
+
+
 def user_message(state: AgentState) -> str:
     parts = []
     if pc := state.get("property_context"):
@@ -106,6 +119,12 @@ def user_message(state: AgentState) -> str:
         parts.append(
             "Answer this on its own terms: don't compare with the visitor's budget or "
             "earlier preferences unless the question asks."
+        )
+    if asks_verdict(q):
+        # Next to the question for the same reason: followed far more reliably.
+        parts.append(
+            "This asks for a decision: show the options in a table, then end with one "
+            "line `**Verdict:** …` naming the winner and the figure that decides it."
         )
     parts.append(f"Question: {state['prompt']}")
     return "\n".join(parts)

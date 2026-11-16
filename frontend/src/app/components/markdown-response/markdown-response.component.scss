@@ -91,12 +91,16 @@
   }
 
   :deep(table) {
-    width: 100%;
+    // Block + overflow-x: a wide table scrolls sideways instead of being clipped
+    // on narrow screens; max-content keeps short tables their natural width.
+    display: block;
+    width: max-content;
+    max-width: 100%;
+    overflow-x: auto;
     border-collapse: collapse;
     margin: 1.5rem 0;
     border: 1px solid #e5e7eb;
     border-radius: 0.5rem;
-    overflow: hidden;
 
     thead {
       background-color: #f3f4f6;

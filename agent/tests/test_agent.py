@@ -114,18 +114,52 @@ def test_answer_streams_sentence_by_sentence():
     sent: list[dict] = []
     gate = OutputGate(sent.append, {"x": [{"price_aed": 1_850_000}]}, "")
     gate.on_tool({"toolUseId": "1", "name": "get_listing"})
-    for piece in ["Burj Vista is AED 1,85", "0,000. It is ", "ready", " now. Ask"]:
+    for piece in ["**Burj Vista is AED 1,85", "0,000.**\nIt is ", "ready", " now. Ask"]:
         gate.on_text(piece)
     chunks = [e["content"] for e in sent if e["event_type"] == "chunk"]
-    assert chunks == ["Burj Vista is AED 1,850,000.", " It is ready now."]  # " Ask" still held
+    assert chunks == ["**Burj Vista is AED 1,850,000.**", "\nIt is ready now."]  # " Ask" held
     gate.on_turn_end(had_tool_use=False)
-    assert gate.answer == "Burj Vista is AED 1,850,000. It is ready now. Ask"
+    assert gate.answer == "**Burj Vista is AED 1,850,000.**\nIt is ready now. Ask"
+
+
+def test_narration_between_tool_calls_is_dropped():
+    sent: list[dict] = []
+    gate = OutputGate(sent.append, {"x": [{"price_aed": 1_850_000}]}, "")
+    gate.on_tool({"toolUseId": "1", "name": "search_listings"})
+    gate.on_turn_end(had_tool_use=True)
+    # After a tool: narration, then another tool call. Nothing may reach the visitor.
+    gate.on_text("Now let me calculate the ROI for these listings. ")
+    gate.on_text("This takes a moment.")
+    assert not [e for e in sent if e["event_type"] == "chunk"]
+    gate.on_tool({"toolUseId": "2", "name": "calculate_roi"})
+    gate.on_turn_end(had_tool_use=True)
+    gate.on_text("**Burj Vista is AED 1,850,000.**\nReady now")
+    assert [e["content"] for e in sent if e["event_type"] == "chunk"] == [
+        "**Burj Vista is AED 1,850,000.**"
+    ]  # the answer streams as soon as it opens with the takeaway
+    gate.on_turn_end(had_tool_use=False)
+    assert "let me" not in gate.answer and gate.dropped_narration == 1
+
+
+def test_a_final_turn_without_a_takeaway_is_still_sent():
+    sent: list[dict] = []
+    gate = OutputGate(sent.append, {}, "")
+    gate.on_tool({"toolUseId": "1", "name": "search_listings"})
+    gate.on_turn_end(had_tool_use=True)
+    gate.on_text("Here are two options. Both are ready now.")
+    assert not sent[1:]  # held: it might have been narration
+    gate.on_turn_end(had_tool_use=False)
+    assert gate.answer == "Here are two options. Both are ready now."
 
 
 def test_gate_blocks_an_invented_figure_and_cancels_the_agent():
     script = [
         SEARCH,
-        ("text", "Burj Vista is AED 1,850,000. Its neighbour is AED 9,999,999. More text. " * 3),
+        (
+            "text",
+            "**Burj Vista is AED 1,850,000.**\n"
+            + "Its neighbour is AED 9,999,999. More text. " * 3,
+        ),
     ]
     g, factory = graph(fake_classify("property_search"), script)
     events, final = run(g, "Tell me about Burj Vista")
@@ -527,3 +561,22 @@ def test_hybrid_rank_keeps_what_the_visitors_own_words_find():
 def test_search_without_index_falls_back_to_keywords():
     r = listings.search({}, "golf course living")
     assert r["ranked_by"] == "keyword" and "Golf" in r["listings"][0]["title"]
+
+
+def test_decision_questions_ask_for_a_verdict():
+    from agent.specialists.agents import asks_verdict
+
+    for q in (
+        "Which area is better for rental ROI?",
+        "Compare Burj Vista and Park Heights",
+        "Is DAMAC Prive worth it?",
+        "Burj Vista vs Park Heights",
+    ):
+        assert asks_verdict(q), q
+    for q in ("Something with a beach and lagoons", "What's the ROI on Burj Vista?"):
+        assert not asks_verdict(q), q
+    g, factory = graph(fake_classify("roi"), [("text", "ok")])
+    run(g, "Which area is better for rental ROI?")
+    assert "**Verdict:**" in factory.made[0].prompt
+    run(g, "What's the ROI on Burj Vista?", session="s-2")
+    assert "**Verdict:**" not in factory.made[1].prompt

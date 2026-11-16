@@ -3,9 +3,12 @@ here before it reaches the browser.
 
 1. Narration before or between tool calls ("Let me search…") is held and
    dropped when a tool call follows; each tool call sends a `status` event.
-2. Once tools have run, the answer is released sentence by sentence (or line by
-   line, for tables and bullets). Each piece is checked first: every AED figure
-   must appear in a tool result this turn or in the visitor's own words.
+2. Once tools have run, a model turn that opens like an answer (the bold
+   takeaway `**`, a table `|` or a heading `#`) is released sentence by sentence
+   (or line by line, for tables and bullets). A turn that opens any other way
+   ("Now let me calculate…") is held until it ends, and dropped if a tool call
+   follows. Each piece is checked first: every AED figure must appear in a tool
+   result this turn or in the visitor's own words.
 3. A piece that fails is never sent. The gate sends a safe line instead and
    stops; the caller cancels the agent.
 4. The <<SUGGESTIONS>> block is held back and becomes the `suggestions` event.
@@ -30,6 +33,8 @@ STOP_LINE = (
 )
 # A sentence ends at . ! ? followed by whitespace, or at a newline.
 _BOUNDARY = re.compile(r"(?<=[.!?])[ \t]+|\n")
+# How an answer opens (the prompt requires a bold takeaway); narration doesn't.
+_ANSWER_OPENINGS = ("**", "|", "#")
 
 
 def parse_suggestions(tail: str) -> list[str]:
@@ -58,6 +63,7 @@ class OutputGate:
         self.turn = ""  # text of the current model turn
         self.sent = 0  # how much of `turn` has been released
         self.tool_used = False
+        self.answer_turn = False  # this turn opened like an answer: stream it
         self.answer = ""
         self.suggestions: list[str] = []
         self.stopped = False
@@ -72,8 +78,16 @@ class OutputGate:
         if self.stopped:
             return
         self.turn += delta
-        if self.tool_used:
-            self._release(final=False)
+        if not self.tool_used:
+            return
+        if not self.answer_turn:
+            head = self.turn.lstrip()
+            if len(head) < 2:
+                return
+            if not head.startswith(_ANSWER_OPENINGS):
+                return  # maybe narration before another tool call: hold until we know
+            self.answer_turn = True
+        self._release(final=False)
 
     def on_tool(self, use: dict[str, Any]) -> None:
         if self.stopped:
@@ -96,7 +110,7 @@ class OutputGate:
             self._drop_turn()
         else:
             self._release(final=True)
-            self.turn, self.sent = "", 0
+            self.turn, self.sent, self.answer_turn = "", 0, False
 
     def finish(self) -> None:
         """End of stream: release anything a final turn left (e.g. a turn limit)."""
@@ -110,7 +124,7 @@ class OutputGate:
     def _drop_turn(self) -> None:
         if self.turn[self.sent :].strip():
             self.dropped_narration += 1
-        self.turn, self.sent = "", 0
+        self.turn, self.sent, self.answer_turn = "", 0, False
 
     def _release(self, final: bool) -> None:
         pending = self.turn[self.sent :]
