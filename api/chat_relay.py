@@ -1,5 +1,5 @@
 """POST /api/chat: screen the question, check the caps, run the agent, relay its
-SSE events unchanged.
+SSE events unchanged (status, chunk, suggestions, trace, done, error).
 
     AGENT_MODE=local      run agent/ in this process (local dev)
     AGENT_MODE=agentcore  InvokeAgentRuntime and pass its stream through (AWS)
@@ -18,6 +18,7 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 from collections.abc import AsyncIterator
 from functools import lru_cache
@@ -228,7 +229,9 @@ def client_ip(request: Request) -> str | None:
 @router.post("")
 async def chat(body: ChatRequest, request: Request) -> StreamingResponse:
     ip = client_ip(request)
+    t0 = time.perf_counter()
     prompt, refusal = guard_in(body.prompt)
+    t1 = time.perf_counter()
     if refusal:
         log.warning("guard_in blocked a prompt (len=%d)", len(body.prompt))
         await asyncio.to_thread(limits.note_injection, ip)
@@ -247,6 +250,13 @@ async def chat(body: ChatRequest, request: Request) -> StreamingResponse:
                 "history": [t.model_dump() for t in body.history],
                 "session_id": body.session_id,
                 "visitor_id": body.visitor_id,
+                # How long the checks above took: the first steps of the agent's trace
+                # (agent/tracing.py). Replies written here, without the agent, carry no
+                # trace: a refusal says nothing about what was detected.
+                "guard": {
+                    "screen_ms": round((t1 - t0) * 1000, 1),
+                    "limits_ms": round((time.perf_counter() - t1) * 1000, 1),
+                },
             }
         )
     return StreamingResponse(

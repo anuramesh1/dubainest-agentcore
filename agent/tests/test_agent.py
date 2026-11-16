@@ -12,7 +12,7 @@ import pytest
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.store.memory import InMemoryStore
 
-from agent import memory
+from agent import memory, tracing
 from agent.graph import build_graph
 from agent.grounding import ungrounded
 from agent.nodes.router import keyword_route
@@ -580,3 +580,112 @@ def test_decision_questions_ask_for_a_verdict():
     assert "**Verdict:**" in factory.made[0].prompt
     run(g, "What's the ROI on Burj Vista?", session="s-2")
     assert "**Verdict:**" not in factory.made[1].prompt
+
+
+# ── The trace shown in the chat (agent/tracing.py) ───────────────────────────
+
+
+def trace_of(events):
+    return next(e["content"] for e in events if e["event_type"] == "trace")
+
+
+def test_trace_event_lists_the_steps_in_order():
+    g, _ = graph(
+        fake_classify("property_search"), [("text", "Let me search. "), SEARCH, ("text", ANSWER)]
+    )
+    events, _ = run(g, "Tell me about Burj Vista")
+    kinds = [e["event_type"] for e in events]
+    assert kinds[-2:] == ["trace", "done"]
+    t = trace_of(events)
+    assert [s["kind"] for s in t["steps"]] == ["memory", "route", "agent", "tool", "gate", "memory"]
+    route, agent_step, tool, gate = t["steps"][1:5]
+    assert route["label"] == "intent → property_search · node → property_agent"
+    assert route["detail"] == {"model": "fake-router", "confidence": 0.9}
+    assert agent_step["label"] == "Strands → property_agent"
+    assert agent_step["detail"]["model_calls"] == 2 and agent_step["detail"]["stop"] == "end_turn"
+    assert tool["label"] == "call search_listings" and tool["detail"]["status"] == "ok"
+    assert tool["detail"]["results"] >= 1
+    assert gate["detail"] == {"blocked": [], "narration_dropped": 1}
+    assert t["intents"] == ["property_search"] and t["agent"] == "property_agent"
+    assert t["tools"] == ["search_listings"] and t["model_calls"] == 3
+    assert (t["tokens_in"], t["tokens_out"]) == (210, 55) and t["total_ms"] >= 0
+    assert all(set(s) == {"kind", "label", "detail", "ms"} for s in t["steps"])
+
+
+def test_trace_shows_no_arguments_results_or_profile_values():
+    """The site is public: names, counts and timings only."""
+    g, _ = graph(fake_classify("property_search"), [SEARCH, ("text", ANSWER)])
+    run(g, "My budget is AED 2,500,000, show me Burj Vista", visitor="v-trace")
+    events, _ = run(g, "Tell me about Burj Vista", session="s-2", visitor="v-trace")
+    t = trace_of(events)
+    assert t["steps"][0]["detail"]["profile_keys"]  # the key names are shown...
+    flat = str(t)
+    assert "2,500,000" not in flat and "2500000" not in flat  # ...their values are not
+    assert "1,850,000" not in flat and "Tell me about" not in flat
+
+
+def test_trace_of_a_blocked_answer_and_a_failed_lookup():
+    g, _ = graph(
+        fake_classify("property_search"),
+        [
+            ("tool", "get_listing", {"listing": "Nowhere Towers"}),
+            ("text", "**It is AED 9,999,999.**"),
+        ],
+    )
+    events, _ = run(g, "Tell me about Nowhere Towers")
+    steps = trace_of(events)["steps"]
+    tool = next(s for s in steps if s["kind"] == "tool")
+    assert tool["detail"]["status"] == "error"
+    gate = next(s for s in steps if s["kind"] == "gate")
+    assert gate["label"] == "output gate: blocked an unverified figure"
+    assert gate["detail"]["blocked"] == ["AED 9,999,999"]
+
+
+def test_trace_of_the_paths_without_a_model(saved_leads):
+    g, _ = graph(fake_classify("off_topic"), [])
+    events, _ = run(g, "Write me a poem about cats")
+    t = trace_of(events)
+    assert [s["kind"] for s in t["steps"]] == ["memory", "route", "gate", "memory"]
+    assert t["steps"][2]["label"].startswith("off-topic") and t["tools"] == []
+    assert t["model_calls"] == 1  # the router only
+
+    viewing = (
+        "tool",
+        "request_viewing",
+        {
+            "listing": "Burj Vista",
+            "preferred_time": "Saturday 10am",
+            "name": "Sam Lee",
+            "email": "sam@example.com",
+        },
+    )
+    g, _ = graph(fake_classify("scheduler"), [viewing, ("text", f"**Ready.** {CONFIRM_PHRASE}")])
+    ask = "Book Burj Vista for Saturday 10am, I'm Sam Lee, sam@example.com"
+    first, _ = run(g, ask, session="s-view")
+    tool = next(s for s in trace_of(first)["steps"] if s["kind"] == "tool")
+    assert tool["detail"]["outcome"] == "confirm" and "sam@example.com" not in str(trace_of(first))
+    events, _ = run(g, "yes", session="s-view")
+    t = trace_of(events)
+    route = next(s for s in t["steps"] if s["kind"] == "route")
+    assert route["detail"] == {"model": "none (rule)", "rule": "viewing_confirmation"}
+    assert route["label"] == "intent → scheduler · node → confirm_viewing"
+    assert any(s["label"].startswith("viewing confirmation") for s in t["steps"])
+    assert t["model_calls"] == 0
+
+
+def test_trace_guard_steps_and_model_names():
+    t = tracing.build({"trace": []}, {"screen_ms": 0.24, "limits_ms": "12.5"}, 20)
+    assert [(s["label"], s["ms"]) for s in t["steps"]] == [
+        ("layer 1: injection screen", 0.2),
+        ("rate and daily caps", 12.5),
+    ]
+    assert tracing.build({"trace": []}, "nonsense")["steps"] == []
+    assert tracing.short_model("us.anthropic.claude-haiku-4-5-20251001-v1:0") == "claude-haiku-4-5"
+    assert tracing.short_model("us.amazon.nova-micro-v1:0") == "nova-micro"
+    twice = {"node": "roi_agent", "framework": "strands", "tools": ["get_listing"] * 2}
+    t = tracing.build({"trace": [twice]})
+    assert t["tools"] == ["get_listing"]  # the pill names a tool once...
+    assert [s["kind"] for s in t["steps"]].count("tool") == 2  # ...the steps show both calls
+    assert "route" in tracing.render(
+        tracing.build({"trace": [{"node": "router", "rule": "x"}], "intents": ["roi"]})
+    )

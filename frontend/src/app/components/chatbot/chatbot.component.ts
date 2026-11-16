@@ -12,18 +12,28 @@ import { FormsModule } from "@angular/forms";
 import { I18nService } from "../../services/i18n.service";
 import { ChatService, ChatTurn } from "../../services/chat.service";
 import { MarkdownResponseComponent } from "../markdown-response/markdown-response.component";
+import {
+  AgentTrace,
+  AgentTraceComponent,
+} from "../agent-trace/agent-trace.component";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
   suggestions?: string[];
+  trace?: AgentTrace; // the steps the agent took, shown under the answer
 }
 
 @Component({
   selector: "app-chatbot",
   standalone: true,
-  imports: [CommonModule, FormsModule, MarkdownResponseComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    MarkdownResponseComponent,
+    AgentTraceComponent,
+  ],
   templateUrl: "./chatbot.component.html",
   styleUrls: ["./chatbot.component.scss"],
 })
@@ -295,6 +305,22 @@ export class ChatbotComponent {
               updated[placeholderIndex] = {
                 ...updated[placeholderIndex],
                 suggestions: evt.content as string[],
+              };
+            }
+            return updated;
+          });
+          this.scrollToBottom();
+          return;
+        }
+
+        // "trace" — the steps the agent took, shown under the finished answer
+        if (evType === "trace" && Array.isArray(evt?.content?.steps)) {
+          this.messages.update((msgs) => {
+            const updated = [...msgs];
+            if (updated[placeholderIndex]) {
+              updated[placeholderIndex] = {
+                ...updated[placeholderIndex],
+                trace: evt.content as AgentTrace,
               };
             }
             return updated;

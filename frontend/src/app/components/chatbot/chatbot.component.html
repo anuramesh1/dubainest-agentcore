@@ -108,6 +108,11 @@
               </div>
             </ng-template>
           </div>
+          <app-agent-trace
+            *ngIf="msg.role === 'assistant' && msg.trace"
+            [trace]="msg.trace"
+            class="mt-2 ml-5 max-w-4xl"
+          ></app-agent-trace>
           <div
             *ngIf="
               msg.role === 'assistant' && (msg.suggestions?.length ?? 0) > 0
@@ -304,6 +309,11 @@
               </div>
             </ng-template>
           </div>
+          <app-agent-trace
+            *ngIf="msg.role === 'assistant' && msg.trace"
+            [trace]="msg.trace"
+            class="mt-2 ml-4 max-w-[88%]"
+          ></app-agent-trace>
           <div
             *ngIf="
               msg.role === 'assistant' && (msg.suggestions?.length ?? 0) > 0

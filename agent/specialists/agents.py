@@ -194,6 +194,7 @@ async def run_specialist(state: AgentState, *, make: MakeAgent, node: str) -> di
                 "output_tokens": int(usage.get("outputTokens", 0)),
                 "ms": round((time.perf_counter() - t0) * 1000),
                 "tools": box.calls,
+                "tool_calls": box.timeline,
                 "stop_reason": getattr(result, "stop_reason", None),
                 "ungrounded": gate.blocked,
                 "narration_dropped": gate.dropped_narration,

@@ -58,3 +58,8 @@ def sessions_table() -> str | None:
 def memory_table() -> str | None:
     """Long-term visitor memory (LangGraph store). Unset: in-process memory."""
     return os.getenv("MEMORY_TABLE") or None
+
+
+def show_trace() -> bool:
+    """Send the `trace` event the chat UI shows under an answer (agent/tracing.py)."""
+    return os.getenv("SHOW_TRACE", "on").strip().lower() not in ("off", "0", "false", "no")

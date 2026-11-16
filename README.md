@@ -74,7 +74,7 @@ Open http://localhost:4200. Locally the chat runs the agent inside the api proce
 | `GET /api/properties/{id}` | One listing, 404 if unknown |
 | `POST /api/enquiries` | The detail page's enquiry form → Leads table (`source: enquiry_form`), 201. Name and email required; phone and message optional |
 | `GET /api/chat/property-intro/{id}` | Templated intro for the open listing, no model call |
-| `POST /api/chat` (prompt, property_id, history, session_id, visitor_id) | Injection screen, caps, then the agent's SSE events, relayed unchanged |
+| `POST /api/chat` (prompt, property_id, history, session_id, visitor_id) | Injection screen, caps, then the agent's SSE events (answer, suggestions, trace), relayed unchanged |
 
 ## The agent: LangGraph orchestrates, Strands agents answer
 
@@ -103,14 +103,15 @@ START → load_memory → router ─┬→ property_agent ─┐
   Tools return every derived figure (budget gaps, comparisons, monthly and annual ROI), so the model never does arithmetic.
 - **Output gate** ([agent/specialists/gate.py](agent/specialists/gate.py)): narration before tool calls is dropped and replaced by `status` events ("Searching listings…"); the answer streams sentence by sentence, each checked first: every AED figure must come from this turn's tool results, earlier (already checked) answers or the visitor's words. A failing sentence is never sent; the stream stops with a safe line and the agent is cancelled.
 - **Memory** ([agent/memory.py](agent/memory.py), [nodes/memory_nodes.py](agent/nodes/memory_nodes.py)): the conversation per chat session through LangGraph's checkpointer (`DynamoDBSaver`, 24 h); the visitor profile through LangGraph's store (`DynamoDBStore`, 90 days): budget, areas, bedrooms, types, purpose, first name, listings seen. Extracted by code, never email or phone. Memory is available, not imposed: the budget reaches the agent only when the question is about budget, other preferences only when the question refers to the visitor.
-- **Events** ([agent/stream.py](agent/stream.py)): `status` → `chunk`… → `suggestions` → `done`, or `error` with a safe message.
+- **Events** ([agent/stream.py](agent/stream.py)): `status` → `chunk`… → `suggestions` → `trace` → `done`, or `error` with a safe message.
+- **Agent trace** ([agent/tracing.py](agent/tracing.py)): under each answer the chat shows the intent, the agent and the tools as pills, and a collapsed list of the steps taken: the API's injection screen and caps, memory, the route (model, confidence, any keyword override), the Strands agent (model calls, tokens), each tool call with its timing, and the output gate. It is the `trace` event, built from the entries every graph node already records. The site is public, so a step carries names, counts and timings only: no prompts, tool arguments or results, or profile values. Replies the API writes itself (refusals, caps) have no trace. `SHOW_TRACE=off` on the agent turns it off.
 
 Market figures in [data/area_stats.json](data/area_stats.json) are hand-written notes dated June 2026, marked unverified; agents quote their date.
 
 ```bash
 # in-process (Bedrock calls; listings from DynamoDB, or LISTINGS_SOURCE=seed)
 .venv/bin/python -m agent.cli "2 bed apartments under 3M"
-.venv/bin/python -m agent.cli --property 10 --trace "What's the expected ROI?"
+.venv/bin/python -m agent.cli --property 10 --trace "What's the expected ROI?"   # the steps; --trace-raw for the raw entries
 .venv/bin/python -m agent.cli --chat          # a conversation; /new starts a session, same visitor
 
 # evals against Bedrock (about 130 model calls, a few cents; leads are not written)

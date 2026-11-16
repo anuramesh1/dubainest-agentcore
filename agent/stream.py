@@ -14,11 +14,13 @@ each request starts a fresh thread seeded from the browser's history.
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator, Callable
 from functools import lru_cache
 from typing import Any
 
+from . import config, tracing
 from .graph import build_graph
 
 log = logging.getLogger(__name__)
@@ -40,7 +42,7 @@ async def stream_events(
     on_final: Callable[[dict[str, Any]], None] | None = None,
 ) -> AsyncIterator[dict[str, Any]]:
     """request: the body of POST /api/chat: prompt, property_id?, history?, locale?,
-    session_id?, visitor_id?"""
+    session_id?, visitor_id?, guard? (the API's check timings, for the trace)"""
     graph = graph or default_graph()
     session = request.get("session_id") or f"anon-{uuid.uuid4()}"
     state_in = {
@@ -64,6 +66,7 @@ async def stream_events(
     run_config = {"configurable": {"thread_id": session}}
     yield _event("status", "Thinking...")
     final: dict[str, Any] = {}
+    t0 = time.perf_counter()
     try:
         async for mode, payload in graph.astream(
             state_in,
@@ -82,4 +85,13 @@ async def stream_events(
     finally:
         if on_final:
             on_final(final)
+    if final and config.show_trace():
+        guard = request.get("guard")
+        took = (time.perf_counter() - t0) * 1000
+        try:
+            if isinstance(guard, dict):
+                took += float(guard.get("screen_ms") or 0) + float(guard.get("limits_ms") or 0)
+            yield _event("trace", tracing.build(final, guard, took))
+        except Exception:  # noqa: BLE001 — the trace must never cost the visitor an answer
+            log.exception("could not build the trace")
     yield _event("done", "")

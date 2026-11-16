@@ -1,0 +1,25 @@
+<div class="trace-pills">
+  <span class="trace-pill" *ngIf="trace.intents.length"
+    >intent: {{ trace.intents.join(" + ") }}</span
+  >
+  <span class="trace-pill" *ngIf="trace.agent">{{ trace.agent }}</span>
+  <span class="trace-pill" *ngIf="trace.tools.length"
+    >tools: {{ trace.tools.join(", ") }}</span
+  >
+</div>
+<details class="trace">
+  <summary>
+    agent trace · {{ trace.steps.length }} steps · {{ seconds }}s ·
+    {{ trace.model_calls }} model
+    {{ trace.model_calls === 1 ? "call" : "calls" }} · {{ tokens }} tokens
+  </summary>
+  <div class="trace-body">
+    <div class="trace-step" *ngFor="let s of trace.steps">
+      <span class="trace-kind" [attr.data-kind]="s.kind">{{ s.kind }}</span>
+      <span class="trace-label"
+        >{{ s.label }} <span class="trace-detail">{{ detail(s) }}</span></span
+      >
+      <span class="trace-ms">{{ ms(s) }}</span>
+    </div>
+  </div>
+</details>

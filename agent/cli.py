@@ -19,6 +19,7 @@ import json
 import uuid
 from typing import Any
 
+from . import tracing
 from .stream import default_graph, stream_events
 
 
@@ -40,6 +41,13 @@ async def ask(request: dict[str, Any], events: bool) -> dict[str, Any]:
     return final
 
 
+def _print_trace(final: dict, a: argparse.Namespace) -> None:
+    if a.trace:
+        print("\n" + tracing.render(tracing.build(final)))
+    if a.trace_raw:
+        print(json.dumps(final.get("trace", []), indent=1, default=str))
+
+
 async def main() -> None:
     p = argparse.ArgumentParser(description="Run questions through the DubaiNest graph.")
     p.add_argument("prompt", nargs="?")
@@ -48,7 +56,8 @@ async def main() -> None:
     p.add_argument("--session", help="chat session id (conversation memory)")
     p.add_argument("--visitor", help="visitor id (long-term memory)")
     p.add_argument("--chat", action="store_true", help="interactive conversation")
-    p.add_argument("--trace", action="store_true", help="print the node/model trace")
+    p.add_argument("--trace", action="store_true", help="print the steps the agent took")
+    p.add_argument("--trace-raw", action="store_true", help="print the raw trace entries (JSON)")
     p.add_argument("--events", action="store_true", help="print raw SSE events")
     a = p.parse_args()
 
@@ -61,8 +70,7 @@ async def main() -> None:
             p.error("a question, or --chat")
         hist = json.loads(a.history) if a.history else []
         final = await ask({**base, "prompt": a.prompt, "history": hist}, a.events)
-        if a.trace:
-            print(json.dumps(final.get("trace", []), indent=1, default=str))
+        _print_trace(final, a)
         return
 
     print(f"session {session}  visitor {visitor}   (/new, /quit)")
@@ -80,8 +88,7 @@ async def main() -> None:
         if q:
             print("ai  › ", end="")
             final = await ask({**base, "prompt": q}, a.events)
-            if a.trace:
-                print(json.dumps(final.get("trace", []), indent=1, default=str))
+            _print_trace(final, a)
 
 
 if __name__ == "__main__":

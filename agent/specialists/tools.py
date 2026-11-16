@@ -8,7 +8,9 @@ user says yes. Tools are read-only: request_viewing never writes a lead.
 
 from __future__ import annotations
 
+import functools
 import re
+import time
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -56,6 +58,7 @@ class ToolBox:
         self.seen_ids: list[str] = []
         self.pending_viewing: dict[str, Any] | None = None
         self.calls: list[str] = []
+        self.timeline: list[dict[str, Any]] = []  # one entry per call, for the UI trace
 
     # ── bookkeeping ──────────────────────────────────────────────────────────
 
@@ -63,6 +66,31 @@ class ToolBox:
         self.calls.append(name)
         self.facts.setdefault(name, []).append(result)
         return result
+
+    def _timed(self, fn: Callable) -> Callable:
+        """Note how long a tool took and how it ended. Counts and flags only: the
+        trace is shown to visitors, so no arguments or results."""
+
+        @functools.wraps(fn)
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            t0 = time.perf_counter()
+            entry: dict[str, Any] = {"name": fn.__name__, "status": "error", "summary": {}}
+            try:
+                result = fn(*args, **kwargs)
+                if isinstance(result, dict):
+                    entry["status"] = "error" if "error" in result else "ok"
+                    if isinstance(result.get("listings"), list):
+                        entry["summary"]["results"] = len(result["listings"])
+                    if isinstance(result.get("status"), str):
+                        entry["summary"]["outcome"] = result["status"]
+                else:
+                    entry["status"] = "ok"
+                return result
+            finally:
+                entry["ms"] = round((time.perf_counter() - t0) * 1000, 1)
+                self.timeline.append(entry)
+
+        return wrapper
 
     def _seen(self, *rows: dict[str, Any] | None) -> None:
         for r in rows:
@@ -81,6 +109,7 @@ class ToolBox:
         box = self
 
         @tool
+        @box._timed
         def search_listings(
             query: str,
             area: str | None = None,
@@ -160,6 +189,7 @@ class ToolBox:
             return box._record("search_listings", result)
 
         @tool
+        @box._timed
         def get_listing(listing: str = "") -> dict:
             """Full details of one listing, plus other listings in the same area.
 
@@ -188,6 +218,7 @@ class ToolBox:
             )
 
         @tool
+        @box._timed
         def compare_listings(listings_to_compare: list[str]) -> dict:
             """Compare 2-4 listings side by side, with the price and size gaps worked out.
 
@@ -203,6 +234,7 @@ class ToolBox:
             )
 
         @tool
+        @box._timed
         def area_market(areas: list[str] | None = None) -> dict:
             """Dubai market notes per area: price per sq ft, yield range, demand, profile.
             Figures are dated (as_of) and not verified against Dubai Land Department data.
@@ -225,6 +257,7 @@ class ToolBox:
             return box._record("area_market", stats)
 
         @tool
+        @box._timed
         def calculate_roi(
             listing: str = "",
             non_resident: bool = False,
@@ -260,6 +293,7 @@ class ToolBox:
             return box._record("calculate_roi", result)
 
         @tool
+        @box._timed
         def request_viewing(
             listing: str = "",
             preferred_time: str = "",
@@ -333,6 +367,7 @@ class ToolBox:
             return box._record("request_viewing", out)
 
         @tool
+        @box._timed
         def catalogue_overview() -> dict:
             """What DubaiNest can help with, and the catalogue by developer, area and price."""
             rows = listings.all_listings()

@@ -1,0 +1,117 @@
+// The agent trace under an answer. Monospace and quiet: it is for the curious.
+$mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.trace-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.trace-pill {
+  font-family: $mono;
+  font-size: 10.5px;
+  line-height: 1.4;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #4338ca;
+  border: 1px solid #e0e7ff;
+  overflow-wrap: anywhere;
+}
+
+.trace {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+
+  summary {
+    cursor: pointer;
+    font-family: $mono;
+    font-size: 11px;
+    color: #64748b;
+    padding: 7px 10px;
+    list-style: none;
+    user-select: none;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+    &::before {
+      content: "▸ ";
+    }
+    &:focus-visible {
+      outline: 2px solid #6366f1;
+      outline-offset: 2px;
+      border-radius: 8px;
+    }
+  }
+
+  &[open] summary::before {
+    content: "▾ ";
+  }
+}
+
+.trace-body {
+  padding: 2px 10px 8px;
+}
+
+.trace-step {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+  font-family: $mono;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 4px 0;
+  border-top: 1px dashed #e2e8f0;
+  color: #1e293b;
+
+  &:first-child {
+    border-top: 0;
+  }
+}
+
+.trace-kind {
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  color: #64748b;
+
+  &[data-kind="guardrail"] {
+    color: #b91c1c;
+  }
+  &[data-kind="route"] {
+    color: #4338ca;
+  }
+  &[data-kind="agent"] {
+    color: #7c3aed;
+  }
+  &[data-kind="tool"] {
+    color: #1d4ed8;
+  }
+  &[data-kind="gate"] {
+    color: #b45309;
+  }
+}
+
+.trace-label {
+  overflow-wrap: anywhere;
+}
+
+.trace-detail {
+  color: #64748b;
+}
+
+.trace-ms {
+  color: #64748b;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

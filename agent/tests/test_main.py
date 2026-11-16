@@ -54,10 +54,17 @@ def test_invocation_streams_the_ui_contract(client):
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
     evs = events(r)
     kinds = [e["event_type"] for e in evs]
-    assert kinds[0] == "status" and kinds[-1] == "done" and "suggestions" in kinds
+    assert kinds[0] == "status" and kinds[-2:] == ["trace", "done"] and "suggestions" in kinds
     assert all(set(e) == {"role", "event_type", "content"} for e in evs)
     text = "".join(e["content"] for e in evs if e["event_type"] == "chunk")
     assert text.startswith("**Burj Vista") and "<<" not in text
+
+
+def test_trace_can_be_switched_off(client, monkeypatch):
+    monkeypatch.setenv("SHOW_TRACE", "off")
+    evs = events(client.post("/invocations", json={"prompt": "Tell me about Burj Vista"}))
+    kinds = [e["event_type"] for e in evs]
+    assert "trace" not in kinds and kinds[-1] == "done"
 
 
 @pytest.mark.parametrize("body", [{}, {"prompt": "  "}, {"prompt": 42}])
