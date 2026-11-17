@@ -2,7 +2,7 @@
 
 An AI real-estate assistant for buying property in Dubai, built to cost almost nothing while idle. **LangGraph orchestrates Strands agents** on Amazon Bedrock AgentCore Runtime, with conversation and long-term memory in DynamoDB, behind a Lambda Function URL and CloudFront. No servers, load balancers or NAT gateways run between questions: idle cost is about $0.10–0.30 a month, and a question costs about $0.007.
 
-![Architecture](assets/architecture.png)
+![DubaiNest architecture on AWS: browser, CloudFront, S3, the api Lambda, Bedrock AgentCore Runtime running the LangGraph graph, DynamoDB, Bedrock models and the S3 data bucket](assets/architecture.png)
 
 | Layer | Technology |
 | --- | --- |
@@ -13,9 +13,10 @@ An AI real-estate assistant for buying property in Dubai, built to cost almost n
 | Memory | DynamoDB: LangGraph checkpointer (conversation) + store (visitor profile) |
 | Search | Titan Text Embeddings v2 + keyword ranking over a small NumPy index in S3 |
 | Infrastructure | AWS CDK (TypeScript) |
+| Observability | Agent trace under each chat answer; CloudWatch logs, optional dashboard, alarms and budget |
 | UI | Angular 21 + Tailwind |
 
-**What it does:** search listings in plain language ("something with a beach and lagoons for my family"), compare them, explain market trends, work out yields, mortgage and cash flow, and take viewing requests. Answers stream sentence by sentence, and every AED figure is checked against a tool result before the visitor sees it.
+**What it does:** search listings in plain language ("something with a beach and lagoons for my family"), compare them, explain market trends, work out yields, mortgage and cash flow, and take viewing requests. Answers stream sentence by sentence, and every AED figure is checked against a tool result before the visitor sees it. Under each answer the chat shows an **agent trace**: the route taken, the agent, each tool call, the output gate, timings and token counts.
 
 ## Layout
 
